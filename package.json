@@ -1,0 +1,26 @@
+{
+  "name": "lightshow-studio",
+  "version": "0.2.0",
+  "description": "3D lightshow designer and DMX previsualizer",
+  "author": "Lightshow Studio",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/artnet-roundtrip.js",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.lightshow.studio",
+    "productName": "Lightshow Studio",
+    "win": {
+      "target": ["portable"]
+    }
+  }
+}

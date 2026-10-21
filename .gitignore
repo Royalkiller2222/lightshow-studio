@@ -1,0 +1,16 @@
+# Dependencies & build output
+node_modules/
+dist/
+
+# Generated logs / support artifacts
+*.log
+install-log.txt
+diagnostic-report.txt
+
+# Temp preview-server artifacts (see Docs/DEV_WORKFLOW.md)
+nocache_server.py
+.claude/launch.json
+
+# OS
+Thumbs.db
+.DS_Store
