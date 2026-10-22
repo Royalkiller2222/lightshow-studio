@@ -50,6 +50,9 @@ export class LaserRig {
     this.blank();
   }
 
+  /** True while a laser cue is being drawn (the preview shows "live"). */
+  get active() { return this._frame !== null; }
+
   blank() {
     this.graphic.geometry.setDrawRange(0, 0);
     this.beams.geometry.setDrawRange(0, 0);
@@ -125,7 +128,7 @@ export class LaserRig {
     const [r, g, b] = p.color || [1, 1, 1];
     const br = p.brightness ?? 1;
     ctx.strokeStyle = `rgba(${(r * 255) | 0},${(g * 255) | 0},${(b * 255) | 0},${Math.min(1, br)})`;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = Math.max(1.5, w / 120); // ~1.5 CSS px on the hi-DPI overlay canvas
     const map = (pt) => {
       let X = pt[0] * cz - pt[1] * sz, Y = pt[0] * sz + pt[1] * cz;
       X = (X * size + (p.posX || 0)); Y = (Y * size + (p.posY || 0));

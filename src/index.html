@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Lightshow Studio</title>
@@ -15,95 +15,35 @@
     }
   </script>
 </head>
-<body>
-  <aside id="ui">
-    <h1>Lightshow Studio</h1>
+<!-- Layout: top bar / [library | 3D view | inspector] / bottom area. The
+     workspace (Build, Program) decides what the library, inspector and bottom
+     area show; Simple/Pro decides how much detail they show. -->
+<body class="pro-mode" data-ws="program">
+  <header id="topbar"></header>
 
-    <section>
-      <h2>DMX</h2>
-      <label>Mode
-        <select id="mode">
-          <option value="internal" selected>Internal show</option>
-          <option value="external">External console (previz)</option>
-        </select>
-      </label>
-      <label>Art-Net target IP
-        <input id="artnet-ip" type="text" value="127.0.0.1" spellcheck="false" />
-      </label>
-      <label class="row">
-        <input id="sacn" type="checkbox" />
-        <span>Also output sACN (E1.31)</span>
-      </label>
-      <p id="status" class="hint"></p>
-    </section>
+  <div id="workspace">
+    <aside id="left" class="panel side" aria-label="Library">
+      <div id="lib-build" class="panel-fill" data-ws-only="build"></div>
+      <div id="lib-program" class="panel-fill" data-ws-only="program"></div>
+    </aside>
+    <div class="split v" data-split="left" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to hide"></div>
 
-    <section>
-      <h2>Project</h2>
-      <div class="row2">
-        <button id="proj-save" type="button">Save project</button>
-        <button id="proj-load" type="button">Load project</button>
-      </div>
-      <input id="proj-file" type="file" accept=".json,application/json" hidden />
-      <p id="proj-status" class="hint"></p>
-    </section>
+    <main id="center">
+      <canvas id="view"></canvas>
+      <div id="overlay"></div>
+    </main>
 
-    <section>
-      <h2>Tools</h2>
-      <div class="toolbar">
-        <button type="button" class="tool active" data-tool="select">Select</button>
-        <button type="button" class="tool" data-tool="move">Move</button>
-        <button type="button" class="tool" data-tool="rotate">Rotate</button>
-      </div>
-      <p class="hint">Click a fixture to select it (its mirror highlights too). Move shows X/Y/Z arrows; Rotate snaps to 45&deg;.</p>
-      <p class="hint">Keys: <b>V</b> select &middot; <b>X</b> move &middot; <b>C</b> rotate &middot; <b>Del</b> remove &middot; <b>Space</b> play/pause &middot; <b>Ctrl+S</b> save &middot; <b>Ctrl+Z</b>/<b>Ctrl+Y</b> undo/redo &middot; <b>Esc</b> deselect</p>
-    </section>
-
-    <section>
-      <h2>Patch</h2>
-      <div id="patch"></div>
-    </section>
-
-    <section>
-      <h2>Atmosphere</h2>
-      <label>Haze density
-        <input id="haze" type="range" min="0" max="1" step="0.01" value="0.6" />
-      </label>
-      <label>Room brightness
-        <input id="brightness" type="range" min="0" max="2.5" step="0.01" value="0.9" />
-      </label>
-      <label class="row">
-        <input id="house-light" type="checkbox" />
-        <span>House light (illuminate venue)</span>
-      </label>
-    </section>
-
-    <section>
-      <h2>Show</h2>
-      <label>BPM
-        <input id="bpm" type="number" min="40" max="220" value="126" />
-      </label>
-      <button id="fire" type="button">Hold to fire cold sparks</button>
-    </section>
-
-    <section>
-      <h2>Room (meters)</h2>
-      <div class="grid3">
-        <label>W <input id="room-w" type="number" min="3" value="14" /></label>
-        <label>D <input id="room-d" type="number" min="3" value="18" /></label>
-        <label>H <input id="room-h" type="number" min="3" value="6" /></label>
-      </div>
-      <button id="apply-room" type="button">Rebuild room</button>
-    </section>
-
-    <section>
-      <p class="hint">Left-drag orbit &middot; right-drag pan &middot; scroll zoom</p>
-    </section>
-  </aside>
-
-  <div id="stage">
-    <canvas id="view"></canvas>
-    <section id="timeline"></section>
+    <div class="split v" data-split="right" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to hide"></div>
+    <aside id="right" class="panel side" aria-label="Inspector">
+      <div id="inspector" class="panel-fill"></div>
+    </aside>
   </div>
+
+  <div class="split h" data-split="bottom" role="separator" aria-orientation="horizontal" title="Drag to resize · double-click to hide"></div>
+  <section id="bottom" class="panel" aria-label="Timeline and patch">
+    <div id="patchsheet" class="panel-fill" data-ws-only="build"></div>
+    <div id="timeline" class="panel-fill" data-ws-only="program"></div>
+  </section>
 
   <script type="module" src="app.js"></script>
 </body>

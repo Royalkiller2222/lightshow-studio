@@ -30,8 +30,11 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1500,
     height: 950,
-    backgroundColor: '#0a0a0c',
+    minWidth: 1100,  // below this the top bar and three panels can't all fit
+    minHeight: 680,
+    backgroundColor: '#0d0f12',
     title: 'Lightshow Studio',
+    icon: path.join(__dirname, 'src', 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

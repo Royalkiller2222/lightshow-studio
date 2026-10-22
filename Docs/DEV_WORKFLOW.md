@@ -48,6 +48,23 @@ an hour if you don't know them.
    A clean renderer load (the module graph parsed, `animate()` ran) shows **no**
    such lines. The one benign line you'll always see is the Chromium
    "Network service crashed, restarting service" notice on Windows — ignore it.
+   **Caveat:** this only catches what reaches the log. A *packaged* app that
+   can't load a module logs nothing here — use the CDP probe below instead.
+
+4. **Packaged app → CDP probe.** After any packaging or dependency change, build
+   the unpacked app (`npx electron-builder --win dir --x64`), start
+   `dist\win-unpacked\Lightshow Studio.exe --remote-debugging-port=9333`
+   hidden, then from Node: `fetch('http://127.0.0.1:9333/json')`, open the
+   page's `webSocketDebuggerUrl` and `Runtime.evaluate` something only a fully
+   loaded app has (e.g. `document.querySelectorAll('#topbar button').length`,
+   the canvas size, the clock text advancing). The UI is built by `app.js`, so
+   an empty top bar means the module graph failed. This is how the missing
+   `three/examples` folder was caught (see below).
+
+5. **Headless UI-module checks.** `core/Rig.js` and `core/project.js` run in
+   Node with a real `THREE.Scene` and stub room/timeline/editTools objects —
+   that's how save → open → save losslessness, mirror links, auto-patching and
+   undo/redo/"Edited" were checked for the remake.
 
 ## Visual verification — the browser preview loop
 
@@ -62,13 +79,22 @@ as in the old nested layout, the page is `/lightshow-studio/src/index.html`.)
   `preview_start` can't find it, the error names the exact path it expects.
   Point the config at a server script kept outside the repo and pass the folder
   to serve as an argument (the server below takes `port` and `root`).
-- **Size the viewport first:** the preview pane defaults to ~800×600, where the
-  timeline inspectors wrap and look broken. Emulate e.g. 1440×900 before judging
-  layout, and reset to desktop afterwards.
+- **Size the viewport first:** the preview pane defaults to ~800×600, below the
+  app's 1100×680 minimum window. Emulate 1280×800 (readable screenshots) or
+  1100×680 (the tightest real layout) before judging layout; reset to desktop
+  afterwards. Screenshots come back scaled to ~800 px wide — click coordinates
+  are in that scaled frame.
 - **Drive the UI with real clicks, read state from the DOM.** App objects are
-  module-scoped (no globals), so verify via what's rendered: the laser
-  inspector's readouts (`[data-lpval]`), `.tl-lp.anim` / `.tl-lp.cur` classes,
-  and the `.tl-kf` ticks on a laser cue block (`style.left` = key time %).
+  module-scoped (no globals), so verify via what's rendered: `body[data-ws]` /
+  `body.simple`, the inspector's fields (`[data-fx="px"]`, `[data-lpval]`),
+  `.lp-row.anim` / `.cur`, patch rows (`.ps-table tr.sel`), cue blocks
+  (`.tl-cue`, `.sel`, the `.tl-kf` ticks — `style.left` = key time %), the top
+  bar's `[data-role="dirty"]` and `document.title`.
+- **Drag and drop can be scripted:** create a `DataTransfer`, dispatch
+  `dragstart` on the library item, then `dragover` + `drop` (with `clientX/Y`)
+  on the cue lane or the `#view` canvas, all with that same `dataTransfer`.
+  The `find` tool often misses this app's elements; compute coordinates from
+  `getBoundingClientRect()` instead.
 
 ### Gotcha 1 — ES-module caching (the big one)
 Python's `http.server` sends no `Cache-Control`, so the browser caches each ES
@@ -120,6 +146,55 @@ verify via `preview_eval` instead: read DOM state, or read the laser preview
 canvas pixels (`getImageData`) to confirm something is drawing, or read DMX from
 an exposed `hub`. Restarting the preview server sometimes unsticks it.
 
+### Gotcha 4 — `closest()` and attributes on `<body>`
+`<body>` carries `data-ws` (and classes like `simple`). Delegated click handlers
+that do `e.target.closest('[data-ws]')` match the **body** for every click —
+that silently swallowed every top-bar button once. Use attribute names the body
+doesn't have (`data-tab`, `data-act`, `data-mode`, …).
+
+### Gotcha 5 — don't run `python` on this machine
+`python` is the Windows Store stub and hangs waiting for the Store. Use `py -3`
+(or Node) for scripts.
+
+## Packaging & releasing
+
+### Build the installer locally
+`npm run dist` → `dist/LightshowStudio-Setup-<version>.exe` (+ `dist/win-unpacked`).
+`npx electron-builder --win dir --x64` builds only the unpacked app (faster) for
+a CDP probe. `dist/` is gitignored; delete it when done (it's ~300 MB).
+
+### electron-builder drops three's addons unless the hook is in place
+electron-builder skips every dependency's top-level `examples` folder, and
+three keeps OrbitControls / TransformControls / the post passes in
+`examples/jsm`. `package.json` → `build.onNodeModuleFile` →
+`scripts/builder-include.js` force-includes it; a `files` pattern does not.
+Check after dependency changes:
+```bash
+node -e "const l=require('@electron/asar').listPackage('dist/win-unpacked/resources/app.asar'); console.log(l.some(f=>f.replace(/\\\\/g,'/').endsWith('three/examples/jsm/controls/OrbitControls.js')))"
+```
+
+### Icons
+The logo lives in `src/ui/logo.js`. After changing it run `npm run icons`
+(Electron renders it): `build/icon.ico` (16–256 px), `build/icon.png`,
+`build/icon.svg`, `src/assets/icon.png`. Commit the outputs.
+
+### Releasing (every finished stage)
+1. Bump `version` in `package.json` **and** the two root `version` fields at the
+   top of `package-lock.json` (only those two — other packages in the lock may
+   coincidentally share the number).
+2. Add a `## vX.Y.Z — YYYY-MM-DD` section at the top of `CHANGELOG.md`, written
+   for users (it becomes the release notes).
+3. Verify (tests, boot, preview, ideally a local `npm run dist` + CDP probe),
+   commit, `git push`.
+4. `git tag vX.Y.Z && git push origin vX.Y.Z`. `.github/workflows/release.yml`
+   checks the tag matches `package.json`, runs `npm test`, builds the installer
+   and publishes the release.
+5. Watch it: `https://api.github.com/repos/Royalkiller2222/lightshow-studio/actions/runs?per_page=1`
+   (public repo, no auth needed) or the Actions tab; then confirm the release
+   page lists the `.exe`.
+If a release run fails, fix, delete the tag (`git push --delete origin vX.Y.Z`,
+`git tag -d vX.Y.Z`) and re-tag the fixed commit.
+
 ## Cleanup discipline (every session)
 
 Before you consider work done:
@@ -128,13 +203,14 @@ Before you consider work done:
   the preview tool wanted it — don't delete other files in that `.claude/`) and
   any server script you put inside a project folder.
 - Remove any `?v=` cache-bust tags you added to imports.
-- Remove stray `*.log` from boot checks.
+- Remove stray `*.log` from boot checks, and `dist/` after packaging.
 - Re-run `npm test` and one boot check on the clean tree.
 
 ## Memory files (Claude Code persistent memory)
 
-Two memory notes from the prior project carry the same lessons; keep them in sync
-with this doc:
+Memory notes carry the same lessons; keep them in sync with this doc:
 - **project-root-nested** — the app is in `lightshow-studio/`, not the working-dir
   root. (Moot if the new repo root *is* `lightshow-studio/`.)
-- **preview-module-caching** — the caching + DMX-injection gotchas above.
+- **preview-module-caching** — launch.json location, no-cache server, viewport
+  size, DOM-based checks.
+- **ui-redesign-decisions** — the user's choices for the UI remake.

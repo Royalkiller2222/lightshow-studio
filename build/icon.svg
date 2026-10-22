@@ -1,0 +1,32 @@
+<svg class="" viewBox="0 0 64 64" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="master-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#202734"/><stop offset="1" stop-color="#0b0d12"/>
+    </linearGradient>
+    <radialGradient id="master-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.35" stop-color="#cfe2ff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="master-clip"><rect x="2" y="2" width="60" height="60" rx="14.5"/></clipPath><linearGradient id="master-b0" gradientUnits="userSpaceOnUse" x1="32" y1="47" x2="-10.9" y2="11">
+      <stop offset="0" stop-color="#ff4fa3" stop-opacity="1"/>
+      <stop offset="1" stop-color="#ff4fa3" stop-opacity="0.1"/>
+    </linearGradient><linearGradient id="master-b1" gradientUnits="userSpaceOnUse" x1="32" y1="47" x2="8.33" y2="-3.75">
+      <stop offset="0" stop-color="#a06bff" stop-opacity="1"/>
+      <stop offset="1" stop-color="#a06bff" stop-opacity="0.1"/>
+    </linearGradient><linearGradient id="master-b2" gradientUnits="userSpaceOnUse" x1="32" y1="47" x2="32" y2="-9">
+      <stop offset="0" stop-color="#4d8dff" stop-opacity="1"/>
+      <stop offset="1" stop-color="#4d8dff" stop-opacity="0.1"/>
+    </linearGradient><linearGradient id="master-b3" gradientUnits="userSpaceOnUse" x1="32" y1="47" x2="55.67" y2="-3.75">
+      <stop offset="0" stop-color="#2fd6f0" stop-opacity="1"/>
+      <stop offset="1" stop-color="#2fd6f0" stop-opacity="0.1"/>
+    </linearGradient><linearGradient id="master-b4" gradientUnits="userSpaceOnUse" x1="32" y1="47" x2="74.9" y2="11">
+      <stop offset="0" stop-color="#3ee09a" stop-opacity="1"/>
+      <stop offset="1" stop-color="#3ee09a" stop-opacity="0.1"/>
+    </linearGradient></defs>
+  <rect x="2" y="2" width="60" height="60" rx="14.5" fill="url(#master-bg)"/>
+  <g clip-path="url(#master-clip)" style="isolation:isolate"><polygon points="32,47 -14.37,15.14 -7.43,6.87" fill="url(#master-b0)" style="mix-blend-mode:screen"/><polygon points="32,47 3.44,-1.47 13.23,-6.04" fill="url(#master-b1)" style="mix-blend-mode:screen"/><polygon points="32,47 26.6,-9 37.4,-9" fill="url(#master-b2)" style="mix-blend-mode:screen"/><polygon points="32,47 50.77,-6.04 60.56,-1.47" fill="url(#master-b3)" style="mix-blend-mode:screen"/><polygon points="32,47 71.43,6.87 78.37,15.14" fill="url(#master-b4)" style="mix-blend-mode:screen"/></g>
+  <circle cx="32" cy="47" r="11" fill="url(#master-glow)"/>
+  <path d="M32 42 L37 47 L32 52 L27 47 Z" fill="#ffffff"/>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="14" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+</svg>

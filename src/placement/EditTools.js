@@ -2,9 +2,10 @@
 //
 // - Click a fixture's body to select it; it (and its mirror twin) tint blue.
 // - Move mode shows a translate gizmo (X/Y/Z arrows), snapped to the grid.
-// - Rotate mode shows a Y-axis ring snapped to 45°.
+// - Rotate mode shows X/Y/Z rings snapped to 45°.
 // Transforms drive the live fixture via its setPosition/setRotation, and the
-// mirror twin follows symmetrically (mirrored x, negated yaw).
+// mirror twin follows symmetrically (mirrored x, negated yaw and roll).
+// onSelect(fx|null) tells the inspector and patch sheet what is selected.
 //
 // The gizmo is driven through a proxy Object3D so it never fights a fixture's
 // internal structure. Picking ignores beams/sparks (userData.ignorePick); the
@@ -19,13 +20,14 @@ const HILITE = new THREE.MeshStandardMaterial({
 });
 
 export class EditTools {
-  constructor({ canvas, camera, controls, scene, fixtures, grid = 0.5, onChange = null }) {
+  constructor({ canvas, camera, controls, scene, fixtures, grid = 0.5, onChange = null, onSelect = null }) {
     this.canvas = canvas;
     this.camera = camera;
     this.controls = controls;
     this.scene = scene;
     this.fixtures = fixtures;
     this.onChange = onChange; // fired when a gizmo move/rotate is committed
+    this.onSelect = onSelect; // fired when the selection changes (fx or null)
 
     this.mode = 'select';
     this.selected = null;
@@ -52,7 +54,8 @@ export class EditTools {
     scene.add(this.tc);
 
     window.addEventListener('pointerdown', (e) => this._onPointerDown(e), true);
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.deselect(); });
+    // Esc-to-deselect is handled by the app's shortcut handler (it knows when
+    // focus is in a text field).
   }
 
   setMode(mode) {
@@ -90,21 +93,39 @@ export class EditTools {
   }
 
   select(fx) {
-    if (this.selected !== fx) {
-      this.deselect();
+    const changed = this.selected !== fx;
+    if (changed) {
+      this._clearSelection();
       this.selected = fx;
       this._highlight(fx);
       if (fx.mirror) this._highlight(fx.mirror);
     }
     this._attachGizmo();
+    if (changed) this.onSelect?.(fx);
   }
 
   deselect() {
+    const had = this.selected !== null;
+    this._clearSelection();
+    if (had) this.onSelect?.(null);
+  }
+
+  _clearSelection() {
     this._clearHighlight();
     this.selected = null;
     this.tc.detach();
     this.tc.visible = false;
     this.tc.enabled = false;
+  }
+
+  /** Re-sync the gizmo after the fixture was moved some other way (inspector, undo). */
+  refresh() {
+    if (!this.selected) return;
+    // A mirror link made/broken elsewhere changes which bodies glow.
+    this._clearHighlight();
+    this._highlight(this.selected);
+    if (this.selected.mirror) this._highlight(this.selected.mirror);
+    this._attachGizmo();
   }
 
   /** Drop selection if the removed fixture (or its twin) was selected. */

@@ -1,3 +1,13 @@
+// Renderer entry and composition root: builds the 3D scene, the DMX core, the
+// rig, the show engine and the UI, wires them together, and runs the frame
+// loop. Behaviour lives in the modules; this file only connects them.
+//
+//   top bar ─ workspaces (Build / Program), transport, Simple/Pro, output
+//   left    ─ Build: fixture library · Program: pattern + effect library
+//   centre  ─ the 3D view + floating tools / atmosphere / laser preview
+//   right   ─ inspector (selected fixture or cue, else venue / show)
+//   bottom  ─ Build: patch sheet · Program: timeline
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -9,11 +19,10 @@ import { UniverseHub } from './dmx/UniverseHub.js';
 import { hazeUniform } from './viz/beam.js';
 import { Room } from './viz/Room.js';
 import { HouseLight } from './viz/HouseLight.js';
-import { MovingHead } from './fixtures/MovingHead.js';
-import { ColdSparkMachine } from './fixtures/ColdSpark.js';
+import { Atmosphere } from './viz/Atmosphere.js';
 import { ShowEngine } from './show/ShowEngine.js';
+import { EFFECTS } from './show/effects.js';
 import { Patch } from './patch/Patch.js';
-import { PatchPanel } from './patch/PatchPanel.js';
 import { FIXTURE_TYPES, fixtureType } from './fixtures/registry.js';
 import { PlacementController } from './placement/PlacementController.js';
 import { EditTools } from './placement/EditTools.js';
@@ -21,8 +30,21 @@ import { AudioEngine } from './audio/AudioEngine.js';
 import { analyzeTempo } from './audio/bpm.js';
 import { Transport } from './timeline/Transport.js';
 import { TimelinePanel } from './timeline/TimelinePanel.js';
+import { CueInspector, effectShortName } from './timeline/CueInspector.js';
 import { LaserRig } from './laser/LaserRig.js';
-import { loadAnim } from './laser/envelopes.js';
+import { PATTERNS } from './laser/patterns.js';
+import { Rig } from './core/Rig.js';
+import { serializeProject, applyProject, History } from './core/project.js';
+import { Shell, WORKSPACES } from './ui/Shell.js';
+import { TopBar } from './ui/TopBar.js';
+import { ViewportOverlay } from './ui/ViewportOverlay.js';
+import { Inspector } from './ui/Inspector.js';
+import { FixtureLibrary } from './ui/FixtureLibrary.js';
+import { ContentLibrary } from './ui/ContentLibrary.js';
+import { PatchSheet } from './ui/PatchSheet.js';
+import { CommandPalette } from './ui/CommandPalette.js';
+import { toast } from './ui/overlays.js';
+import { isTypingTarget, prefs } from './ui/dom.js';
 
 // ---------- Renderer / scene ----------
 const canvas = document.getElementById('view');
@@ -39,120 +61,36 @@ scene.background = new THREE.Color(0x0a0a0c);
 scene.fog = new THREE.FogExp2(0x15151f, 0);
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
-camera.position.set(11, 7.5, 14);
+const CAMERA_HOME = { pos: new THREE.Vector3(11, 7.5, 14), target: new THREE.Vector3(0, 1.8, 0) };
+camera.position.copy(CAMERA_HOME.pos);
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 1.8, 0);
+controls.target.copy(CAMERA_HOME.target);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.52;
 
-// Room fill light — the "Room brightness" slider drives its intensity so a
-// dark venue can be lit enough to see geometry without flooding the beams.
+// Room fill light — the Room light control drives its intensity so a dark
+// venue can be lit enough to see geometry without flooding the beams.
 const ambient = new THREE.AmbientLight(0x6a6a78, 0.9);
 scene.add(ambient);
 
-// ---------- DMX core ----------
+// ---------- DMX core + venue ----------
 const hub = new UniverseHub();
-
-// ---------- Venue ----------
 const room = new Room(scene);
 room.build(14, 18, 6);
 const houseLight = new HouseLight(scene);
+const atmosphere = new Atmosphere({ scene, renderer, ambient, houseLight, hazeUniform });
 
-// ---------- Fixtures + patch ----------
-const fixtures = [];
+// ---------- Rig ----------
 const patch = new Patch();
+const rig = new Rig({ hub, scene, patch });
+rig.seedDemo();
+const fixtures = rig.fixtures;
 
-for (let i = 0; i < 4; i++) {
-  const mh = new MovingHead(hub, scene, {
-    universe: 1,
-    startAddress: 1 + i * 9, // 1, 10, 19, 28
-    position: new THREE.Vector3(-4.5 + i * 3, 5.4, -3),
-    beamLength: 12,
-  });
-  mh.typeKey = 'moving-head';
-  fixtures.push(mh);
-  patch.addFixture(mh, `Moving head ${i + 1}`);
-}
-
-const sparkL = new ColdSparkMachine(hub, scene, { universe: 1, startAddress: 37, position: new THREE.Vector3(-3, 0, -6.5) });
-const sparkR = new ColdSparkMachine(hub, scene, { universe: 1, startAddress: 37, position: new THREE.Vector3(3, 0, -6.5) });
-sparkL.typeKey = 'cold-spark'; sparkR.typeKey = 'cold-spark';
-fixtures.push(sparkL, sparkR);
-patch.addFixture(sparkL, 'Cold spark L');
-patch.addFixture(sparkR, 'Cold spark R');
-
-// Per-type counters seed naming for fixtures added later via the UI.
-const typeCounters = { 'moving-head': 4, 'cold-spark': 2 };
-
-function spawnFixture(typeKey, position = null) {
-  const type = fixtureType(typeKey);
-  if (!type) return null;
-  const n = (typeCounters[typeKey] = (typeCounters[typeKey] ?? 0) + 1);
-
-  // No explicit spot (the Add button): fan across the room so they don't stack.
-  let pos = position;
-  if (!pos) {
-    const x = (((n - 1) % 8) - 3.5) * 1.6;
-    pos = type.onTruss ? new THREE.Vector3(x, 5.4, -3) : new THREE.Vector3(x, 0, -6.5);
-  }
-
-  const fx = type.create(hub, scene, { universe: 1, position: pos });
-  fx.typeKey = typeKey;
-
-  // Props (0 channels) take no DMX address; everything else auto-patches.
-  if (fx.channelCount > 0) {
-    const addr = patch.nextFreeAddress(1, fx.channelCount);
-    if (addr == null) {
-      fx.dispose?.();
-      typeCounters[typeKey]--;
-      return null; // universe 1 is full
-    }
-    fx.startAddress = addr;
-  }
-  fixtures.push(fx);
-  patch.addFixture(fx, `${type.label} ${n}`);
-  return fx;
-}
-
-// Place one fixture per point (drag-drop). Two points = a mirror pair: link
-// them so repositioning one moves the other symmetrically.
-function placeFixtures(typeKey, points) {
-  const made = points.map((p) => spawnFixture(typeKey, new THREE.Vector3(p.x, p.y, p.z))).filter(Boolean);
-  if (made.length === 2) {
-    made[0].mirror = made[1];
-    made[1].mirror = made[0];
-  }
-  history?.record();
-}
-
-function removeFixtureAt(index) {
-  const entry = patch.entries[index];
-  if (!entry) return;
-  const fx = entry.fixture;
-  patch.remove(index);
-  if (fx) {
-    editTools?.onFixtureRemoved(fx); // clear selection/gizmo before teardown
-    if (fx.mirror) fx.mirror.mirror = null; // unlink the surviving twin
-    const i = fixtures.indexOf(fx);
-    if (i >= 0) fixtures.splice(i, 1);
-    fx.dispose?.();
-  }
-  history?.record();
-}
-
-/** Delete the fixture currently selected in the viewport (Delete key). */
-function deleteSelectedFixture() {
-  const fx = editTools?.selected;
-  if (!fx) return;
-  const idx = patch.entries.findIndex((e) => e.fixture === fx);
-  if (idx >= 0) removeFixtureAt(idx);
-}
-
-// ---------- Playback engine ----------
+// ---------- Show engine + the demo show ----------
 const engine = new ShowEngine(hub, fixtures);
-// Seed a default look on the movers (intensity + colour + movement, stacked
+// A default look on the movers (intensity + colour + movement, stacked
 // per-attribute) so the rig is alive on launch and shows the layering model.
 engine.addCue({ effectKey: 'i-flat', groupId: 'movers', start: 0, duration: 16, lane: 2 });
 const seedColor = engine.addCue({ effectKey: 'c-rainbow', groupId: 'movers', start: 0, duration: 16, lane: 1 });
@@ -171,366 +109,377 @@ seedLaser.anim = {
 // ---------- Post-processing ----------
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.85, 0.5, 0.82);
-composer.addPass(bloom);
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.85, 0.5, 0.82));
 composer.addPass(new OutputPass());
 
+let lastW = 0, lastH = 0;
 function resize() {
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  if (canvas.width === Math.floor(w * renderer.getPixelRatio())) {
-    // height may still differ; cheap guard is fine either way
-  }
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h || (w === lastW && h === lastH)) return;
+  lastW = w; lastH = h;
   renderer.setSize(w, h, false);
   composer.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-window.addEventListener('resize', resize);
 
-// ---------- Bridge to main process (DMX hardware I/O) ----------
+// ---------- DMX output (bridge to the main process) ----------
 const bridge = window.dmxBridge ?? null;
-
+const output = {
+  mode: 'internal',
+  artnetIp: prefs.get('output.ip', '127.0.0.1'),
+  sacn: prefs.get('output.sacn', false),
+};
+function pushConfig() {
+  hub.mode = output.mode;
+  bridge?.setConfig({ mode: output.mode, artnetIp: output.artnetIp, sacn: output.sacn });
+}
+function setOutput(change) {
+  Object.assign(output, change);
+  prefs.set('output.ip', output.artnetIp);
+  prefs.set('output.sacn', output.sacn);
+  pushConfig();
+}
 if (bridge) {
   bridge.onArtNetIn(({ universe, data }) => hub.applyExternal(universe, data));
-  // Mirror universe state to the main process for the 40 Hz hardware tick.
+  // Mirror universe state to the main process for its steady 40 Hz output tick.
   setInterval(() => {
     if (hub.mode === 'internal') bridge.pushUniverses(hub.snapshotForIpc());
   }, 25);
 }
-
-function pushConfig() {
-  if (!bridge) return;
-  bridge.setConfig({
-    mode: hub.mode,
-    artnetIp: ui.artnetIp.value.trim() || '127.0.0.1',
-    sacn: ui.sacn.checked,
-  });
-}
-
-// ---------- UI ----------
-const ui = {
-  mode: document.getElementById('mode'),
-  artnetIp: document.getElementById('artnet-ip'),
-  sacn: document.getElementById('sacn'),
-  haze: document.getElementById('haze'),
-  brightness: document.getElementById('brightness'),
-  houseLight: document.getElementById('house-light'),
-  bpm: document.getElementById('bpm'),
-  roomW: document.getElementById('room-w'),
-  roomD: document.getElementById('room-d'),
-  roomH: document.getElementById('room-h'),
-  applyRoom: document.getElementById('apply-room'),
-  fire: document.getElementById('fire'),
-  status: document.getElementById('status'),
-};
-
-ui.mode.addEventListener('change', () => {
-  hub.mode = ui.mode.value;
-  setStatus();
-  pushConfig();
-});
-ui.artnetIp.addEventListener('change', pushConfig);
-ui.sacn.addEventListener('change', pushConfig);
-function applyHaze(v) {
-  hazeUniform.value = v;          // beam cone brightness
-  scene.fog.density = v * 0.012;  // gentle atmospheric depth behind the beams
-}
-ui.haze.addEventListener('input', () => applyHaze(parseFloat(ui.haze.value)));
-applyHaze(parseFloat(ui.haze.value)); // sync fog to the slider's initial value
-
-function applyBrightness(v) {
-  ambient.intensity = v;                                          // fill light
-  renderer.toneMappingExposure = THREE.MathUtils.lerp(0.8, 1.9, v / 2.5); // lifts the whole image
-}
-ui.brightness.addEventListener('input', () => applyBrightness(parseFloat(ui.brightness.value)));
-applyBrightness(parseFloat(ui.brightness.value));
-ui.houseLight.addEventListener('change', () => houseLight.setOn(ui.houseLight.checked));
-ui.bpm.addEventListener('change', () => {
-  const v = parseFloat(ui.bpm.value);
-  if (Number.isFinite(v) && v > 0) { transport.bpm = v; history?.record(); } // single BPM source; timeline grid + demo follow
-});
-ui.applyRoom.addEventListener('click', () => {
-  const w = parseFloat(ui.roomW.value);
-  const d = parseFloat(ui.roomD.value);
-  const h = parseFloat(ui.roomH.value);
-  if ([w, d, h].every((v) => Number.isFinite(v) && v >= 3)) {
-    room.build(w, d, h);
-    houseLight.setRoom(w, d, h);
-    placement?.setTrussY(h - 0.6); // hang drag-placed fixtures just below the ceiling
-    history?.record();
-  }
-});
-ui.fire.addEventListener('pointerdown', () => (engine.manualSpark = true));
-ui.fire.addEventListener('pointerup', () => (engine.manualSpark = false));
-ui.fire.addEventListener('pointerleave', () => (engine.manualSpark = false));
-
-function setStatus() {
-  ui.status.textContent =
-    hub.mode === 'internal'
-      ? 'Internal show -> Art-Net out (universe 1, 40 Hz)'
-      : 'Listening for your console on Art-Net universe 1...';
-}
-setStatus();
 pushConfig();
 
-// ---------- Patch panel + viewport placement ----------
-let placement;
-let editTools;
-let history = null; // assigned in the Project section below
-const patchPanel = new PatchPanel(patch, document.getElementById('patch'), {
-  fixtureTypes: FIXTURE_TYPES,
-  onAdd: (key) => { spawnFixture(key); history?.record(); },
-  onRemove: removeFixtureAt,
-  onDragStart: (key) => placement?.setPendingType(key),
-  onDragEnd: () => placement?.setPendingType(null),
-});
-
-placement = new PlacementController({
-  canvas,
-  camera,
-  controls,
-  scene,
-  fixtures,
-  fixtureType,
-  onPlace: placeFixtures,
-  grid: 0.5,
-  trussY: 5.4,
-  getMirror: () => patchPanel.mirror,
-});
-
-// Select / Move / Rotate tools + the toolbar that switches between them.
-editTools = new EditTools({
-  canvas, camera, controls, scene, fixtures, grid: 0.5,
-  onChange: () => history?.record(),
-});
-const toolButtons = Array.from(document.querySelectorAll('.tool'));
-function setTool(mode) {
-  toolButtons.forEach((b) => b.classList.toggle('active', b.dataset.tool === mode));
-  editTools.setMode(mode);
-}
-for (const btn of toolButtons) btn.addEventListener('click', () => setTool(btn.dataset.tool));
-
-// ---------- Audio / timeline ----------
+// ---------- Audio / transport ----------
 const audio = new AudioEngine();
 const transport = new Transport(audio);
-transport.bpm = parseFloat(ui.bpm.value) || transport.bpm;
 
-const timeline = new TimelinePanel(transport, audio, engine, document.getElementById('timeline'), {
-  onLoadAudio: async (file) => {
-    try {
-      await audio.load(file);
-      transport.pause();
-      transport.seek(0);
-      // Auto-detect tempo + downbeat so the grid and snapping line up.
-      const { bpm, offset } = analyzeTempo(audio.buffer);
-      transport.bpm = bpm;
-      transport.beatOffset = offset;
-      ui.bpm.value = Math.round(bpm * 10) / 10;
-      timeline.setBpm(bpm);
-      timeline.onAudioLoaded();
-      history?.record();
-    } catch (e) {
-      console.warn('Audio load failed:', e.message);
-    }
+// ---------- UI ----------
+const shell = new Shell();
+let history = null; // assigned in the Project section below
+const commit = () => history?.record();
+const project = { name: 'Demo show' };
+
+const editTools = new EditTools({
+  canvas, camera, controls, scene, fixtures, grid: 0.5,
+  onChange: commit,
+  onSelect: (fx) => onFixtureSelected(fx),
+});
+rig.onRemoved = (fx) => editTools.onFixtureRemoved(fx);
+
+const placement = new PlacementController({
+  canvas, camera, controls, scene, fixtures, fixtureType,
+  onPlace: (key, points) => {
+    const made = rig.place(key, points);
+    if (!made.length) { toast('Universe 1 is full — remove a fixture to make room.', { kind: 'error' }); return; }
+    editTools.select(made[0]);
+    commit();
   },
-  onEdit: () => history?.record(),
+  grid: 0.5,
+  trussY: 5.4,
+  getMirror: () => fixtureLibrary.mirror,
 });
 
-// Laser projector: renders the active laser cue as 3D beams + a flat preview.
-const laserRig = new LaserRig(scene, { previewCanvas: timeline.laserPreview });
+const cueInspector = new CueInspector({
+  transport, engine,
+  onChange: () => timeline.renderCues(),
+  onCommit: commit,
+  onDelete: (cue) => timeline.deleteCue(cue),
+});
+
+const timeline = new TimelinePanel(transport, audio, engine, document.getElementById('timeline'), {
+  onLoadAudio: loadSong,
+  onEdit: commit,
+  onSelect: (cue) => onCueSelected(cue),
+  onCueMoved: () => cueInspector.refreshMeta(),
+});
+
+const overlay = new ViewportOverlay(document.getElementById('overlay'), {
+  atmosphere,
+  onTool: setTool,
+  onCameraReset: resetCamera,
+  onSpark: (on) => { engine.manualSpark = on; },
+  onAtmosphereCommit: commit,
+  hasSparks: () => fixtures.some((f) => f.profile && f.profile.has('Trigger')),
+  fixtureCount: () => fixtures.length,
+});
+controls.addEventListener('start', () => overlay.cameraMoved());
+
+// Laser projector: renders the active laser cue as 3D beams + the flat preview.
+const laserRig = new LaserRig(scene, { previewCanvas: overlay.laserCanvas });
 engine.laserRig = laserRig;
 
-// ---------- Project save / load ----------
-// JSON snapshot of the show: room, fixtures (type/patch/position/rotation/mirror),
-// cues, and settings. Audio isn't embedded (binary) — its name is stored as a
-// reminder and the track is re-imported on load.
-function serializeProject() {
-  const order = patch.entries.map((e) => e.fixture);
-  const idx = new Map(order.map((f, i) => [f, i]));
-  const v = new THREE.Vector3();
-  return {
-    app: 'lightshow-studio', version: 1,
-    room: { w: room.size.width, d: room.size.depth, h: room.size.height },
-    settings: { bpm: transport.bpm, beatOffset: transport.beatOffset, haze: parseFloat(ui.haze.value), brightness: parseFloat(ui.brightness.value) },
-    fixtures: patch.entries.map((e) => {
-      const fx = e.fixture;
-      fx.getPosition(v);
-      return {
-        type: fx.typeKey, universe: fx.universe, startAddress: fx.startAddress, label: e.label,
-        pos: [+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)], rot: fx.getRotation().map((r) => +r.toFixed(4)),
-        mirror: fx.mirror && idx.has(fx.mirror) ? idx.get(fx.mirror) : null,
-      };
-    }),
-    cues: engine.cues.map((c) => ({
-      kind: c.kind, effectKey: c.effectKey, groupId: c.groupId, pattern: c.pattern,
-      start: c.start, duration: c.duration, lane: c.lane,
-      params: { ...c.params, color: [...c.params.color] },
-      anim: c.anim ? structuredClone(c.anim) : undefined, // laser keyframe envelopes
-    })),
-    audioName: audio.name || null,
-  };
+const fixtureLibrary = new FixtureLibrary(document.getElementById('lib-build'), {
+  types: FIXTURE_TYPES,
+  shell,
+  onAdd: addFixture,
+  onDragStart: (key) => placement.setPendingType(key),
+  onDragEnd: () => placement.setPendingType(null),
+});
+
+new ContentLibrary(document.getElementById('lib-program'), {
+  shell,
+  onAddPattern: (key) => timeline.addLaserCueAt(key),
+  onAddEffect: (key) => timeline.addFixtureCueAt(key),
+});
+
+const patchSheet = new PatchSheet(document.getElementById('patchsheet'), {
+  patch, rig, shell, fixtureType,
+  onSelect: (fx) => editTools.select(fx),
+  onRemove: removeFixture,
+  onCommit: commit,
+});
+
+const inspector = new Inspector(document.getElementById('inspector'), {
+  shell, patch, rig, room, editTools, cueInspector, transport, audio, engine, fixtureType,
+  getProjectName: () => project.name,
+  onCommit: commit,
+  onRoomChange: setRoom,
+  onRemoveFixture: removeFixture,
+  onSelectFixture: (fx) => editTools.select(fx),
+  onLoadSong: () => timeline.pickAudio(),
+});
+
+const topBar = new TopBar(document.getElementById('topbar'), {
+  transport, shell,
+  getDuration: () => timeline.length,
+  actions: {
+    open: openProject,
+    save: saveProject,
+    undo: () => history.undo(),
+    redo: () => history.redo(),
+    search: () => palette.open(),
+    setBpm,
+    playPause: () => transport.toggle(),
+    stop: () => transport.stop(),
+  },
+  output: { get: () => output, set: setOutput },
+});
+
+const palette = new CommandPalette(commands);
+
+// ---------- Selection -> inspector ----------
+// The inspector follows the most recent pick: clicking a cue shows the cue,
+// clicking a fixture shows the fixture; with nothing selected it shows the
+// workspace's default (venue in Build, show in Program).
+let lastPicked = null;
+function updateInspector() {
+  const cue = shell.workspace === 'program' ? timeline.selected : null;
+  const fx = editTools.selected;
+  if (cue && (lastPicked === 'cue' || !fx)) inspector.show({ kind: 'cue', cue });
+  else if (fx) inspector.show({ kind: 'fixture', fx });
+  else inspector.show(null);
+}
+function onFixtureSelected(fx) {
+  if (fx) lastPicked = 'fixture';
+  patchSheet.setSelected(fx);
+  updateInspector();
+}
+function onCueSelected(cue) {
+  if (cue) lastPicked = 'cue';
+  updateInspector();
+}
+shell.onChange(() => updateInspector());
+
+// ---------- Actions ----------
+function setTool(mode) {
+  editTools.setMode(mode);
+  overlay.setTool(mode);
 }
 
-function clearProject() {
+function resetCamera() {
+  camera.position.copy(CAMERA_HOME.pos);
+  controls.target.copy(CAMERA_HOME.target);
+  controls.update();
+}
+
+function setBpm(v) {
+  transport.bpm = v;
+  topBar.syncBpm();
+  commit();
+}
+
+function setRoom(w, d, h) {
+  room.build(w, d, h);
+  houseLight.setRoom(w, d, h);
+  placement.setTrussY(h - 0.6); // hang drag-placed fixtures just below the ceiling
+  commit();
+}
+
+function addFixture(key) {
+  const fx = rig.spawn(key);
+  if (!fx) { toast('Universe 1 is full — remove a fixture to make room.', { kind: 'error' }); return; }
+  editTools.select(fx);
+  commit();
+}
+
+function removeFixture(fx) {
+  rig.remove(fx);
+  commit();
+}
+
+/** Del: the cue in the inspector if one is shown, else the selected fixture. */
+function deleteSelection() {
+  if (inspector.target?.kind === 'cue') timeline.deleteCue(inspector.target.cue);
+  else if (editTools.selected) removeFixture(editTools.selected);
+}
+
+function deselectAll() {
   editTools.deselect();
-  for (const fx of fixtures.slice()) fx.dispose?.();
-  fixtures.length = 0;
-  patch.clear();
-  engine.cues.length = 0;
-  for (const k of Object.keys(typeCounters)) delete typeCounters[k];
+  timeline.selectCue(null);
 }
 
-function restoreFixture(f) {
-  const type = fixtureType(f.type);
-  if (!type) return null;
-  const pos = Array.isArray(f.pos) ? f.pos : [0, 0, 0];
-  const fx = type.create(hub, scene, { universe: f.universe, position: new THREE.Vector3(...pos) });
-  fx.startAddress = f.startAddress;
-  fx.typeKey = f.type;
-  if (Array.isArray(f.rot)) fx.setRotation(f.rot);
-  else if (typeof f.yaw === 'number') fx.setRotation([0, f.yaw, 0]); // back-compat
-
-  fixtures.push(fx);
-  patch.addFixture(fx, f.label);
-  typeCounters[f.type] = (typeCounters[f.type] ?? 0) + 1;
-  return fx;
-}
-
-function applyProject(data, { keepTransport = false } = {}) {
-  if (!data || data.app !== 'lightshow-studio' || !Array.isArray(data.fixtures)) {
-    throw new Error('not a Lightshow Studio project file');
+async function loadSong(file) {
+  try {
+    await audio.load(file);
+    transport.pause();
+    transport.seek(0);
+    // Auto-detect tempo + downbeat so the grid and snapping line up.
+    const { bpm, offset } = analyzeTempo(audio.buffer);
+    transport.bpm = bpm;
+    transport.beatOffset = offset;
+    topBar.syncBpm();
+    timeline.onAudioLoaded();
+    commit();
+    toast(`Loaded "${audio.name}" — ${Math.round(bpm * 10) / 10} BPM detected`, { kind: 'ok' });
+  } catch (e) {
+    console.warn('Audio load failed:', e.message);
+    toast(`Couldn't load that song: ${e.message}`, { kind: 'error' });
   }
-  clearProject();
-
-  const r = data.room || { w: 14, d: 18, h: 6 };
-  room.build(r.w, r.d, r.h);
-  placement?.setTrussY(r.h - 0.6);
-
-  const made = data.fixtures.map(restoreFixture);
-  data.fixtures.forEach((f, i) => {
-    if (f.mirror != null && made[i] && made[f.mirror]) made[i].mirror = made[f.mirror];
-  });
-
-  for (const c of data.cues || []) {
-    const cue = c.kind === 'laser'
-      ? engine.addLaserCue({ pattern: c.pattern, start: c.start, duration: c.duration, lane: c.lane ?? 0 })
-      : engine.addCue({ effectKey: c.effectKey, groupId: c.groupId, start: c.start, duration: c.duration, lane: c.lane ?? 0 });
-    if (c.params) cue.params = { ...cue.params, ...c.params, color: [...(c.params.color || cue.params.color)] };
-    const anim = c.kind === 'laser' ? loadAnim(c.anim) : undefined;
-    if (anim) cue.anim = anim;
-  }
-
-  const s = data.settings || {};
-  if (Number.isFinite(s.bpm)) { transport.bpm = s.bpm; ui.bpm.value = s.bpm; timeline.setBpm(s.bpm); }
-  if (Number.isFinite(s.beatOffset)) transport.beatOffset = s.beatOffset;
-  if (Number.isFinite(s.haze)) { ui.haze.value = s.haze; applyHaze(s.haze); }
-  if (Number.isFinite(s.brightness)) { ui.brightness.value = s.brightness; applyBrightness(s.brightness); }
-
-  if (!keepTransport) transport.stop();
-  timeline.selectCue(null); // cues were recreated; drop stale selection
-  timeline.renderCues();
 }
 
-function doSave() {
-  const blob = new Blob([JSON.stringify(serializeProject(), null, 2)], { type: 'application/json' });
+// ---------- Project: save / open / undo ----------
+const ctx = { room, houseLight, placement, rig, patch, engine, transport, audio, atmosphere, timeline, editTools };
+
+history = new History({
+  snapshot: () => JSON.stringify(serializeProject(ctx)),
+  // Keep the playhead, the open cue and the selected fixture across undo/redo —
+  // edits happen at the playhead / on the selection, so jumping to 0 or
+  // clearing the inspector would lose the user's place. Cue and patch order are
+  // stable in the snapshot, so an index finds the same object again (or
+  // nothing, if the undo removed it).
+  restore: (json) => {
+    const cueIdx = engine.cues.indexOf(timeline.selected);
+    const fxIdx = patch.entries.findIndex((e) => e.fixture === editTools.selected);
+    const picked = lastPicked;
+    applyProject(ctx, JSON.parse(json), { keepTransport: true });
+    if (fxIdx >= 0 && patch.entries[fxIdx]) editTools.select(patch.entries[fxIdx].fixture);
+    if (cueIdx >= 0 && engine.cues[cueIdx]) timeline.selectCue(engine.cues[cueIdx]);
+    lastPicked = picked;
+    updateInspector();
+    topBar.syncBpm();
+  },
+});
+history.onChange(() => {
+  topBar.setHistory(history.canUndo, history.canRedo);
+  topBar.setDirty(history.dirty);
+  document.title = `${history.dirty ? '• ' : ''}${project.name} — Lightshow Studio`;
+  patchSheet.render(); // mirror links aren't patch events; keep the twin column current
+  editTools.refresh(); // re-glow the twin and re-seat the gizmo after inspector edits / undo
+  // (the inspector re-renders itself when what it shows changes — see Inspector.frame)
+});
+history.reset();
+topBar.setProject(project.name);
+
+function saveProject() {
+  const blob = new Blob([JSON.stringify(serializeProject(ctx), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'lightshow-project.json';
+  a.href = url;
+  a.download = `${project.name.replace(/[\\/:*?"<>|]+/g, '-') || 'show'}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  history.markSaved();
+  toast(`Saved "${a.download}"`, { kind: 'ok' });
 }
-document.getElementById('proj-save').addEventListener('click', doSave);
-const projFile = document.getElementById('proj-file');
-document.getElementById('proj-load').addEventListener('click', () => projFile.click());
-const projStatus = document.getElementById('proj-status');
+
+const projFile = document.createElement('input');
+projFile.type = 'file';
+projFile.accept = '.json,application/json';
+projFile.hidden = true;
+document.body.appendChild(projFile);
+function openProject() { projFile.click(); }
 projFile.addEventListener('change', async () => {
   const file = projFile.files[0];
+  projFile.value = '';
   if (!file) return;
   try {
     const data = JSON.parse(await file.text());
-    applyProject(data);
+    applyProject(ctx, data);
+    project.name = file.name.replace(/\.json$/i, '');
+    topBar.setProject(project.name);
+    topBar.syncBpm();
     history.reset();
     const nFix = (data.fixtures || []).length;
     const nCue = (data.cues || []).length;
-    projStatus.textContent = `Loaded "${file.name}": ${nFix} fixture${nFix === 1 ? '' : 's'}, ${nCue} cue${nCue === 1 ? '' : 's'}.`;
-    projStatus.style.color = '';
+    const song = data.audioName ? ` Load "${data.audioName}" again to hear it.` : '';
+    toast(`Opened "${file.name}": ${nFix} fixture${nFix === 1 ? '' : 's'}, ${nCue} cue${nCue === 1 ? '' : 's'}.${song}`, { kind: 'ok', ms: 5000 });
   } catch (e) {
     console.error('Project load failed:', e);
-    projStatus.textContent = `Load failed: ${e.message}`;
-    projStatus.style.color = '#ff8585';
+    toast(`Couldn't open "${file.name}": ${e.message}`, { kind: 'error', ms: 5000 });
   }
-  projFile.value = '';
 });
 
-// ---------- Undo / redo (whole-show snapshots) ----------
-// Reuses the project serializer: each committed edit snapshots the show; undo/
-// redo re-apply a snapshot. Simple and covers fixtures, cues, room and settings.
-history = {
-  past: [], future: [], present: null, applying: false,
-  reset() { this.past.length = 0; this.future.length = 0; this.present = JSON.stringify(serializeProject()); },
-  record() {
-    if (this.applying) return;
-    const snap = JSON.stringify(serializeProject());
-    if (snap === this.present) return;
-    if (this.present != null) this.past.push(this.present);
-    if (this.past.length > 100) this.past.shift();
-    this.present = snap;
-    this.future.length = 0;
-  },
-  undo() {
-    if (!this.past.length) return;
-    this.future.push(this.present);
-    this.present = this.past.pop();
-    this._apply();
-  },
-  redo() {
-    if (!this.future.length) return;
-    this.past.push(this.present);
-    this.present = this.future.pop();
-    this._apply();
-  },
-  _apply() {
-    // Keep the playhead and the open cue across undo/redo — keyframe editing
-    // is done at the playhead, so jumping to 0 or closing the inspector would
-    // lose the user's place. Cue order is stable in the snapshot, so the index
-    // finds the same cue (or nothing, if the undo removed it).
-    const selIdx = engine.cues.indexOf(timeline.selected);
-    this.applying = true;
-    try { applyProject(JSON.parse(this.present), { keepTransport: true }); } finally { this.applying = false; }
-    if (selIdx >= 0 && engine.cues[selIdx]) timeline.selectCue(engine.cues[selIdx]);
-  },
-};
-history.reset();
-
-// Record settings tweaks as discrete undo steps (on commit, not every drag).
-ui.haze.addEventListener('change', () => history.record());
-ui.brightness.addEventListener('change', () => history.record());
+// ---------- Commands (Ctrl+K) ----------
+function commands() {
+  const list = [];
+  const add = (group, title, run, keys = '', when = null) => list.push({ group, title, run, keys, when });
+  add('Show', 'Play / pause', () => transport.toggle(), 'Space');
+  add('Show', 'Stop and go to the start', () => transport.stop());
+  add('Show', 'Load a song…', () => timeline.pickAudio());
+  add('File', 'Save the show', saveProject, 'Ctrl+S');
+  add('File', 'Open a show…', openProject, 'Ctrl+O');
+  add('Edit', 'Undo', () => history.undo(), 'Ctrl+Z');
+  add('Edit', 'Redo', () => history.redo(), 'Ctrl+Y');
+  add('Edit', 'Delete the selection', deleteSelection, 'Del');
+  add('Edit', 'Deselect', deselectAll, 'Esc');
+  for (const w of WORKSPACES) add('Go to', `${w.label} workspace`, () => shell.setWorkspace(w.id), w.keys);
+  for (const t of FIXTURE_TYPES) add('Add fixture', t.label, () => { shell.setWorkspace('build'); addFixture(t.key); });
+  for (const p of PATTERNS) add('Add laser cue', p.label, () => { shell.setWorkspace('program'); timeline.addLaserCueAt(p.key); });
+  for (const e of EFFECTS) add('Add fixture cue', effectShortName(e) + (e.attr === 'color' ? ' (colour)' : e.attr === 'position' ? ' (movement)' : ''), () => { shell.setWorkspace('program'); timeline.addFixtureCueAt(e.key); });
+  add('Tools', 'Select tool', () => setTool('select'), 'V');
+  add('Tools', 'Move tool', () => setTool('move'), 'X');
+  add('Tools', 'Rotate tool', () => setTool('rotate'), 'C');
+  add('View', 'Reset the camera', resetCamera);
+  add('View', 'House light on', () => { atmosphere.setHouse(true); commit(); }, '', () => !atmosphere.house);
+  add('View', 'House light off', () => { atmosphere.setHouse(false); commit(); }, '', () => atmosphere.house);
+  add('View', 'Show / hide the library', () => shell.togglePanel('left'));
+  add('View', 'Show / hide the inspector', () => shell.togglePanel('right'));
+  add('View', 'Show / hide the timeline or patch sheet', () => shell.togglePanel('bottom'));
+  add('View', 'Switch to Simple mode', () => shell.setPro(false), '', () => shell.pro);
+  add('View', 'Switch to Pro mode', () => shell.setPro(true), '', () => !shell.pro);
+  add('Output', 'Output settings…', () => topBar.openOutput());
+  add('Help', 'Keyboard shortcuts', () => topBar.openHelp(), '?');
+  return list;
+}
 
 // ---------- Keyboard shortcuts ----------
 window.addEventListener('keydown', (e) => {
-  const tag = (e.target.tagName || '').toLowerCase();
-  // Text-entry fields keep their keys (incl. native text undo). Sliders and
-  // colour swatches don't type, so Space/Ctrl+Z still work right after you drag
-  // one — the laser inspector is mostly sliders. Checkboxes keep Space.
-  const typing = tag === 'textarea' || tag === 'select' ||
-    (tag === 'input' && e.target.type !== 'range' && e.target.type !== 'color');
+  if (palette.isOpen) return; // the palette handles its own keys
+  const typing = isTypingTarget(e.target);
   const ctrl = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
 
-  if (ctrl && k === 's') { e.preventDefault(); doSave(); return; }
-  if (typing) return; // let fields handle their own keys (incl. native text undo)
+  if (ctrl && k === 's') { e.preventDefault(); saveProject(); return; }
+  if (ctrl && k === 'o') { e.preventDefault(); openProject(); return; }
+  if (ctrl && k === 'k') { e.preventDefault(); palette.open(); return; }
+  if (typing) return; // let text fields keep their keys (incl. native text undo)
 
   if (ctrl && k === 'z' && !e.shiftKey) { e.preventDefault(); history.undo(); return; }
   if (ctrl && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); history.redo(); return; }
+  const ws = ctrl && WORKSPACES[Number(k) - 1];
+  if (ws) { e.preventDefault(); shell.setWorkspace(ws.id); return; }
+  if (ctrl || e.altKey) return;
 
   switch (k) {
     case 'v': setTool('select'); break;
     case 'x': setTool('move'); break;
     case 'c': setTool('rotate'); break;
-    case ' ': e.preventDefault(); transport.toggle(); break;
+    case ' ': e.preventDefault(); transport.toggle(); break; // also stops a focused button re-clicking
+    case 'escape': deselectAll(); break;
+    case '?': topBar.openHelp(); break;
+    case '/': if (e.shiftKey) topBar.openHelp(); else return; break; // '?' on layouts that report the base key
     case 'delete': case 'backspace':
-      if (tag !== 'input') deleteSelectedFixture(); // never from a focused slider
+      if (e.target.tagName !== 'INPUT') deleteSelection(); // never from a focused slider
       break;
     default: return;
   }
@@ -549,9 +498,14 @@ function animate() {
   const sel = editTools.selected;
   engine.setSelection(sel ? (sel.mirror ? [sel, sel.mirror] : [sel]) : []);
   engine.update(transport.time, transport.bpm, audio.bands());
-
   for (const f of fixtures) f.update(dt);
+
   timeline.frame();
+  cueInspector.frame();
+  inspector.frame();
+  topBar.frame();
+  overlay.frame();
+  overlay.setLaserState(laserRig.active ? 'live' : 'idle');
 
   controls.update();
   resize();

@@ -1,13 +1,15 @@
 {
   "name": "lightshow-studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "3D lightshow designer and DMX previsualizer",
   "author": "Lightshow Studio",
+  "homepage": "https://github.com/Royalkiller2222/lightshow-studio",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "node test/artnet-roundtrip.js",
-    "dist": "electron-builder --win"
+    "icons": "electron scripts/make-icons.js",
+    "dist": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "three": "^0.165.0"
@@ -19,8 +21,32 @@
   "build": {
     "appId": "com.lightshow.studio",
     "productName": "Lightshow Studio",
+    "copyright": "Copyright © 2026 Lightshow Studio",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "dmx-io.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "onNodeModuleFile": "scripts/builder-include.js",
     "win": {
-      "target": ["portable"]
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lightshow Studio",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "LightshowStudio-Setup-${version}.${ext}"
     }
   }
 }

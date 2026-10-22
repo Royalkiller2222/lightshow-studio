@@ -1,7 +1,7 @@
-// Viewport placement: drag a fixture type from the Patch panel into the venue
-// to create it (mirrored across centre by default, snapped to the grid). A
-// ghost preview shows where things will land. Repositioning existing fixtures
-// is handled by the Move/Rotate gizmo in EditTools.
+// Viewport placement: drag a fixture card from the Build library into the
+// venue to create it (mirrored across centre by default, snapped to the grid).
+// A ghost preview shows where things will land. Repositioning existing
+// fixtures is handled by the Move/Rotate gizmo in EditTools.
 
 import * as THREE from 'three';
 import { placementPoints } from './placement.js';
@@ -97,6 +97,9 @@ export class PlacementController {
 
   // ---- drag-in placement ----
   _onDragOver(e) {
+    // Only fixture drags (which announce their type on dragstart) drop here —
+    // library patterns/effects belong on the timeline, not in the venue.
+    if (!this._pendingType) { this._hidePreview(); return; }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     const fp = this._floorPoint(e);

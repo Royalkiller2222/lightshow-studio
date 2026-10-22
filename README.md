@@ -1,112 +1,111 @@
-# Lightshow Studio — Electron + Three.js
+<p align="center"><img src="build/icon.png" width="112" alt="Lightshow Studio logo"></p>
 
-3D lightshow designer / DMX previsualizer. No game engine, no editor, no
-scene assembly: the entire app is code, and it launches with a working show.
+# Lightshow Studio
+
+3D light-show designer and DMX previsualizer, built for laser shows. Program
+a show to a song on a timeline, see it in a hazy 3D venue, and send it to a
+real rig over Art-Net / sACN — or let a lighting console drive the 3D view.
 
 > **Working on the code?** Start with [`CLAUDE.md`](CLAUDE.md) and the
 > [`Docs/`](Docs/) folder — especially [`Docs/DESIGN_DECISIONS.md`](Docs/DESIGN_DECISIONS.md)
 > (the *why* behind the choices) and [`Docs/Roadmap.md`](Docs/Roadmap.md)
 > (what's done and where it's going).
 
-## Run it (one-time setup: install Node.js)
+## Install
 
-1. Install **Node.js LTS** from https://nodejs.org (one installer, defaults fine).
-2. Double-click **`Start Lightshow.bat`**.
-   (First run downloads dependencies — a minute or two — then the app opens.)
+1. Download **`LightshowStudio-Setup-x.y.z.exe`** from the
+   [latest release](https://github.com/Royalkiller2222/lightshow-studio/releases/latest).
+2. Run it. It installs for your Windows user (no admin needed), adds Start-menu
+   and desktop shortcuts, and opens the app.
 
-That's it. You'll see a dark venue with four moving heads sweeping colored
-volumetric beams through haze on a 126 BPM grid, and a laser drawing a spinning,
-breathing tunnel. The 16-second demo loops until you load a track. The
-moving-head show is real DMX data flowing through universe buffers and out as
-Art-Net at 40 Hz (laser cues are visual-only for now).
+Windows may say *"Windows protected your PC"* because the installer isn't
+code-signed yet — click **More info → Run anyway**. On first launch Windows
+Firewall asks about network access: allow it, or no DMX leaves the computer.
 
-Manual alternative: open a terminal in this folder, `npm install`, `npm start`.
+## A tour of the window
 
-## What's in the window
+It opens on a demo show: four moving heads sweeping coloured beams through
+haze and a laser drawing a spinning, breathing tunnel. With no song loaded the
+16-second demo loops.
 
-- **Mode** — `Internal show` plays the built-in demo. `External console`
-  makes the app listen on Art-Net universe 1 so QLC+, grandMA onPC, ONYX or
-  any other console drives the 3D fixtures directly (the previz feature).
-- **Art-Net target IP** — `127.0.0.1` to test locally (watch it in QLC+),
-  your node's IP for a real rig, or `x.x.x.255` for broadcast.
-- **sACN** — also stream E1.31 multicast (better for many-universe rigs).
-- **Haze density** — the master atmosphere control; beams exist because
-  light scatters in haze.
-- **Room W/D/H** — custom venue size, rebuilt live.
-- **Hold to fire cold sparks** — manual spark trigger (or put a *Cold sparks*
-  cue on the timeline).
-- **Timeline** (bottom) — load audio (BPM is detected), add fixture cues
-  (`+ Cue`) or laser cues (`+ Laser`), drag to move / change lane, drag the
-  right edge to resize. Select a laser cue to pick its pattern and edit its Key
-  Effects (Size, Rotation, Position, Colour, Brightness, Points, Scan): the ◆
-  buttons and the envelope editor keyframe them across the cue.
+- **Top bar** — the show's name, open/save, undo/redo, the **Build** and
+  **Program** workspaces, play/stop with the clock and tempo, the
+  **Simple / Pro** switch, the output status (click it for Art-Net / sACN
+  settings), **Search** (Ctrl+K finds any command) and help.
+- **Build workspace** — drag fixtures from the library into the room (they
+  land as a mirrored pair across the centre line by default). Click a fixture
+  to edit its name, position, facing and DMX address in the inspector on the
+  right. The patch sheet along the bottom lists everything.
+- **Program workspace** — load a song (its tempo is detected), then drag laser
+  patterns and fixture effects from the library onto the timeline. Click a cue
+  to edit it on the right. Laser cues have BEYOND-style Key Effects — size,
+  rotation, position, colour, brightness and more — each one keyframeable with
+  the ◆ buttons and the curve editor.
+- **On the 3D view** — Select / Move / Rotate tools, a camera reset, haze, room
+  light and house light, the laser output preview, and "Hold for sparks".
+  Left-drag orbits, right-drag pans, scroll zooms.
+- **Simple vs Pro** — Simple keeps just the essentials. Pro shows DMX
+  addresses and every advanced control (tucked under "More").
 
-Camera: left-drag orbit, right-drag pan, scroll zoom.
+Press **?** for all keyboard shortcuts.
 
-Windows Firewall will ask for permission on first launch — allow it, or no
-DMX flows.
+## Check the DMX output
 
-## Patch (demo rig)
+Install [QLC+](https://qlcplus.org) (free). With the output set to
+`127.0.0.1`, open QLC+'s DMX monitor on Art-Net universe 1 to watch the
+channels animate at 40 Hz. Switch the app to *Follows a console* (Pro → output
+settings) and QLC+'s faders drive the 3D fixtures instead.
 
-| Fixture | Universe | Address | Channels |
-|---|---|---|---|
-| Moving head 1–4 | 1 | 1 / 10 / 19 / 28 | Pan, Pan fine, Tilt, Tilt fine, Dimmer, R, G, B, Zoom |
-| Cold sparks (pair) | 1 | 37 | Trigger (>127 fires), Height |
+Demo patch (universe 1): moving heads 1–4 at 1 / 10 / 19 / 28 (Pan, Pan fine,
+Tilt, Tilt fine, Dimmer, R, G, B, Zoom); the cold-spark pair shares 37
+(Trigger > 127 fires, Height). Laser cues are visual-only for now.
 
-## Verify the DMX output
+## Run from source
 
-Install [QLC+](https://qlcplus.org) (free). With the target IP at
-`127.0.0.1`, open its DMX monitor on Art-Net universe 1 — you'll see all 38
-channels animating at 40 Hz. Flip the app to External mode and QLC+ faders
-will move the 3D fixtures instead.
+1. Install **Node.js LTS** from https://nodejs.org.
+2. Double-click **`Start Lightshow.bat`** (first run downloads dependencies),
+   or in a terminal: `npm install`, then `npm start`.
 
-## Build a standalone .exe
+`npm test` runs the Art-Net / sACN loopback self-test. `npm run dist` builds
+the installer into `dist/`; `npm run icons` regenerates the icons from the
+logo in `src/ui/logo.js`.
+
+## Releases
+
+Every finished update becomes a GitHub Release with the installer attached:
+bump `version` in `package.json`, add a `## vX.Y.Z` section to
+[`CHANGELOG.md`](CHANGELOG.md), commit, then push a tag (`git tag v0.3.0`,
+`git push origin v0.3.0`). GitHub Actions builds the installer on Windows and
+publishes the release with that changelog section as its notes.
+
+## How it works
+
+The renderer owns the **UniverseHub** — the single source of truth for all DMX
+channel state. Writers: the show engine (playing the timeline's cues) in
+internal mode, or incoming Art-Net when following a console. Readers: every
+fixture (they only know their patch address and react to channel values, like
+real fixtures on the wire) and the Electron **main process**, which mirrors the
+buffers and sends them on its own steady 40 Hz tick — so a render hitch never
+strobes your rig.
 
 ```
-npm run dist
-```
-
-Produces a portable `Lightshow Studio.exe` in `dist/` via electron-builder.
-No installer needed; copy it anywhere.
-
-## Architecture (carried over from the design doc)
-
-The renderer owns the **UniverseHub** — thread-safe-by-design single source
-of truth for all DMX channel state. Writers: the show engine (playing the
-timeline's cues) in Internal mode, or incoming Art-Net in External mode. Readers: every fixture (they only know their patch
-address and react to channel values, like real fixtures on the wire) and the
-Electron **main process**, which mirrors the buffers and runs hardware output
-on its own steady 40 Hz tick — so a render hitch never strobes your rig.
-
-```
-UI / ShowEngine (timeline cues)             External console
+Show engine (timeline cues)                 External console
             |                                     |
             v                                     v  (Art-Net in, port 6454)
-        UniverseHub  <---------------------------- 
+        UniverseHub  <----------------------------
         /         \
        v           v
  3D fixtures    Main process ---> Art-Net / sACN out ---> nodes & rig
- (beams, sparks)
 ```
 
-The volumetric beams are analytic cone shaders (no raymarching): radial +
-axial falloff, apex and camera-proximity fades, dither against banding,
-additive blending, ACES tonemapping + bloom. Cost scales with beam pixels on
-screen — dozens of fixtures run fine on mid-range GPUs.
-
-## Self-test
-
-`npm test` runs a loopback check: the real Art-Net sender transmits a known
-512-byte universe to the real receiver over localhost and verifies every
-byte, plus validates the sACN packet structure.
+Beams are analytic fresnel cone shells (no raymarching) with additive blending,
+ACES tone mapping and bloom. Cost scales with beam pixels on screen, so dozens
+of fixtures run fine on mid-range GPUs.
 
 ## Notes
 
 - **Enttec USB Pro** support is deferred: it needs the `serialport` native
-  module, which complicates the one-click install. Art-Net/sACN covers
-  modern nodes; cheap Art-Net gateways bridge to 5-pin DMX. It returns as an
-  optional add-on in a later milestone.
-- Beam-vs-geometry soft intersection (depth fade) is a planned polish pass;
-  in a dark venue the current look is already close.
-
-See `Docs/Roadmap.md` for where every confirmed feature lands.
+  module. Art-Net/sACN covers modern nodes; cheap Art-Net gateways bridge to
+  5-pin DMX.
+- The installer isn't code-signed (a certificate costs money); that's why
+  SmartScreen warns on first run.

@@ -15,18 +15,21 @@ function fmtPct(v) { return `${Math.round(v * 100)}%`; }
  * Single source of truth for laser parameter ranges, labels and display.
  * Values are stored in the units LaserRig consumes (rotation in radians) and
  * only formatted for display (degrees), so saved projects need no migration.
+ * `adv` parameters sit under "More" in Pro and are hidden in Simple; the
+ * plain-language labels are what the inspector shows (Rotation = BEYOND's
+ * Rotation Z, Tilt X/Y = its 3D Rotation X/Y).
  */
 export const LASER_PARAMS = [
   { key: 'size', label: 'Size', min: 0, max: 2, step: 0.01, fmt: fmtNum },
-  { key: 'rotX', label: 'Rot X', min: -Math.PI, max: Math.PI, step: DEG, fmt: fmtDeg },
-  { key: 'rotY', label: 'Rot Y', min: -Math.PI, max: Math.PI, step: DEG, fmt: fmtDeg },
-  { key: 'rotZ', label: 'Rot Z', min: -2 * Math.PI, max: 2 * Math.PI, step: DEG, fmt: fmtDeg },
-  { key: 'posX', label: 'Pos X', min: -1, max: 1, step: 0.01, fmt: fmtNum },
-  { key: 'posY', label: 'Pos Y', min: -1, max: 1, step: 0.01, fmt: fmtNum },
-  { key: 'brightness', label: 'Bright', min: 0, max: 1, step: 0.01, fmt: fmtPct },
-  { key: 'points', label: 'Points', min: 0.02, max: 1, step: 0.01, fmt: fmtPct },
-  { key: 'scan', label: 'Scan', min: 0.1, max: 1, step: 0.01, fmt: fmtPct },
+  { key: 'rotZ', label: 'Rotation', min: -2 * Math.PI, max: 2 * Math.PI, step: DEG, fmt: fmtDeg },
+  { key: 'posX', label: 'Position X', min: -1, max: 1, step: 0.01, fmt: fmtNum },
+  { key: 'posY', label: 'Position Y', min: -1, max: 1, step: 0.01, fmt: fmtNum },
   { key: 'color', label: 'Colour', kind: 'color' },
+  { key: 'brightness', label: 'Brightness', min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  { key: 'rotX', label: 'Tilt X', min: -Math.PI, max: Math.PI, step: DEG, fmt: fmtDeg, adv: true },
+  { key: 'rotY', label: 'Tilt Y', min: -Math.PI, max: Math.PI, step: DEG, fmt: fmtDeg, adv: true },
+  { key: 'points', label: 'Visible points', min: 0.02, max: 1, step: 0.01, fmt: fmtPct, adv: true },
+  { key: 'scan', label: 'Scan rate', min: 0.1, max: 1, step: 0.01, fmt: fmtPct, adv: true },
 ];
 
 export const PARAM_BY_KEY = Object.fromEntries(LASER_PARAMS.map((p) => [p.key, p]));

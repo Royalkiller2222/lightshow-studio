@@ -1,7 +1,8 @@
 // Central registry of every patched fixture: which profile sits at which
 // universe and start address. Pure bookkeeping - it never reads or writes DMX
-// values (that's the hub's job). Drives the Patch panel today; GDTF import,
-// fixture groups, and paperwork export will read from it later.
+// values (that's the hub's job). Drives the patch sheet and the fixture
+// inspector; GDTF import, fixture groups, and paperwork export will read from
+// it later.
 
 export class Patch {
   constructor() {
@@ -50,6 +51,14 @@ export class Patch {
       e.startAddress = Math.min(Math.max(1, Math.floor(startAddress)), maxStart);
       if (e.fixture) e.fixture.startAddress = e.startAddress;
     }
+    this._emit();
+  }
+
+  /** Rename an entry (the fixture's display name). */
+  rename(index, label) {
+    const e = this.entries[index];
+    if (!e || !label) return;
+    e.label = label;
     this._emit();
   }
 

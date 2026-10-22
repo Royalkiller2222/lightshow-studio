@@ -1,0 +1,58 @@
+# Builds the Windows installer and publishes it as a GitHub Release.
+#
+# Trigger: push a version tag, e.g.
+#   git tag v0.3.0 && git push origin v0.3.0
+# The tag must match package.json's version. The release notes are that
+# version's "## vX.Y.Z" section of CHANGELOG.md.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the release and upload the installer
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the tag matches package.json
+        shell: bash
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version ($pkg)"; exit 1
+          fi
+
+      - name: DMX self-test
+        run: npm test
+
+      - name: Build the installer
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          awk -v tag="$tag" '
+            index($0, "## " tag) == 1 { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Lightshow Studio $tag" > notes.md
+          gh release create "$tag" dist/LightshowStudio-Setup-*.exe \
+            --title "Lightshow Studio $tag" --notes-file notes.md

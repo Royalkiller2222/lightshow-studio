@@ -145,10 +145,11 @@ bug or a constraint we already dealt with.
 
 ### Transport is the master clock; one BPM source of truth
 - **Decision:** `Transport.time` follows `AudioEngine.currentTime` when a track is
-  loaded, else free-runs. BPM lives on the transport; both the sidebar BPM input
-  and the timeline BPM input write `transport.bpm`, and the engine reads it.
+  loaded, else free-runs. BPM lives on the transport; the one BPM field (top bar)
+  writes `transport.bpm`, and the engine and beat grid read it.
 - **Why:** Demo is alive on launch with no track; locks to the song when loaded.
-  Two BPM inputs diverging was a real bug — single source fixes it.
+  Two BPM inputs (sidebar + timeline) diverging was a real bug — single source
+  fixes it, and the remake reduced it to a single field.
 
 ### With no track, the free-running clock loops at the show's end
 - **Decision:** `app.js` sets `transport.loopEnd` = the last cue's end every
@@ -173,16 +174,15 @@ bug or a constraint we already dealt with.
   bug). Finite durations + a growing window keep every cue's grip reachable and
   let you drag-extend a cue past the default window without a track loaded.
 
-### The timeline panel is sized by its content; the waveform is a fixed 64 px
-- **Decision:** `#timeline` has no fixed height — toolbar + 64 px waveform + lanes
-  + whichever inspector is open. The 3D view takes the rest of the window.
-- **Why:** It used to be a fixed 300 px with a flexible waveform. Once the laser
-  preview made the toolbar taller, opening any inspector squeezed the waveform to
-  **0 px** (and the envelope editor needs ~150 px more). The view resizing when an
-  inspector opens is the lesser evil — it's how most editors behave.
-- **Don't undo:** Don't put a fixed height back on `#timeline`, and keep the
-  envelope canvas absolutely positioned inside `.tl-env-wrap` — a canvas in a
-  flex column feeds its backing-store size back into layout and grows.
+### Canvases sit absolutely inside a sized wrapper
+- **Decision:** The waveform (`.tl-wave-wrap`) and the keyframe curve editor
+  (`.env-wrap`) canvases are `position:absolute; inset:0` inside a wrapper
+  whose size comes from layout.
+- **Why:** A canvas in a flex column feeds its backing-store size (which we set
+  from its CSS size × devicePixelRatio) back into layout and grows every frame;
+  before the remake that squeezed the waveform to 0 px and ballooned the curve
+  editor to 350 px.
+- **Don't undo:** Keep canvases out of the flex/grid size calculation.
 
 ---
 
@@ -316,15 +316,18 @@ bug or a constraint we already dealt with.
 ## Project persistence & undo
 
 ### Save/load = JSON snapshot; audio is NOT embedded
-- **Decision:** `serializeProject()`/`applyProject()` round-trip room + fixtures
-  (type/patch/pos/rot/mirror) + cues (fixture and laser) + settings to JSON. Audio
-  is re-imported on load (only its name is stored). Load shows a status line
-  ("Loaded N fixtures, M cues").
+- **Decision:** `serializeProject()`/`applyProject()` (`src/core/project.js`)
+  round-trip room + fixtures (type/patch/pos/rot/mirror) + cues (fixture and
+  laser) + settings to JSON. Audio is re-imported on load (only its name is
+  stored). Opening a file shows a notification ("Opened x: N fixtures, M cues",
+  plus a reminder to re-load the song); the file name becomes the show name.
 - **Why:** JSON is simple and already drives undo. Embedding audio needs a zip
-  container (a later item). The status line exists because a silent load failure
+  container (a later item). The notification exists because a silent load failure
   (or loading an old/empty file) looked like "cues vanished" — now you see exactly
   what the file contained. Old files without cues are almost always an older save
   or the wrong `lightshow-project (N).json`.
+- Output settings (Art-Net IP, sACN) are **not** in the show file — they belong
+  to the computer/network, so they're remembered per machine instead.
 
 ### Undo/redo = whole-project snapshots (not a command pattern)
 - **Decision:** `history` snapshots the full serialized project on each committed
@@ -333,13 +336,148 @@ bug or a constraint we already dealt with.
   BPM, haze/brightness, laser envelopes) with a one-line `history.record()` hook
   per action. Simple and robust for this scale.
 - **Undo keeps your place:** undo/redo call `applyProject(..., { keepTransport:
-  true })` and re-select the cue at the same index (cue order is stable in the
-  snapshot). Keyframes are edited at the playhead, so jumping to 0 and closing
-  the inspector on every Ctrl+Z (the old behaviour) lost the user's place.
-  Loading a file still stops the transport.
+  true })` and re-select the cue and the fixture at the same index (cue and
+  patch order are stable in the snapshot). Edits happen at the playhead / on the
+  selection, so jumping to 0 and clearing the inspector on every Ctrl+Z (the old
+  behaviour) lost the user's place. Loading a file still stops the transport.
+- **"Edited" flag:** `History` remembers the snapshot at the last save/open;
+  "Edited" (and a • in the window title) shows whenever the current snapshot
+  differs — undoing back to the saved state clears it, which a simple "changed
+  since save" boolean wouldn't.
 - Saved envelopes go through `loadAnim()` (drops unknown parameters and malformed
   keys, clamps and sorts) on both load and undo, so a hand-edited file can't
   break playback.
+
+---
+
+## The interface (V2 remake, Oct 2026)
+
+The user asked for the app to be "as user friendly and simple as possible with
+advanced things — pros and beginner friendly". Every choice below was made by
+the user from multiple-choice options after seeing a mockup; the recommended
+option won each time. **Don't re-litigate these** — refine within them.
+
+### Workspaces: Build / Program (Live later), one shared 3D view
+- **Decision:** Tabs in the top bar switch the *task*: Build (fixture library,
+  fixture/venue inspector, patch sheet) and Program (pattern + effect library,
+  cue inspector, timeline). The 3D view never changes. Live arrives in remake
+  Stage 4 ("perform the programmed show": section pads from markers, masters,
+  blackout, sparks, fullscreen); the auto-preset joins it in laser Stage 3.
+- **Why:** Beginners follow the tabs left to right; pros jump straight to the
+  one they need. Each screen only shows what that task needs, instead of one
+  sidebar holding everything. The tab doesn't exist until its content does — no
+  "coming soon" UI.
+- **How:** all panels are mounted once; CSS hides `[data-ws-only]` content for
+  other workspaces. Panel sizes are remembered *per workspace* (Build wants a
+  wide library; Program a tall timeline).
+
+### Simple / Pro = a global switch *and* "More" rows
+- **Decision:** Simple shows the essentials only; Pro shows everything, with
+  rarely-used controls inside collapsible "More" rows that remember being open.
+  `.pro` = only in Pro; `more()` = a "More" disclosure (Pro only).
+- **What counts as Pro today:** DMX universe/address/channels (fixtures are
+  auto-patched, so beginners never need them), extra rotation axes, laser
+  tilt X/Y, visible points, scan rate, auto-key and easing, fixture-effect
+  waveform details, the beat-offset field, external-console mode and sACN.
+- **Why:** The user chose "Both". A switch alone hides features people later
+  can't find; More rows alone still crowd beginners. Default is Pro until the
+  welcome screen (remake Stage 5) asks.
+
+### Look: "Studio graphite"
+- **Decision:** Neutral dark greys with a single blue accent (`--accent`).
+  Colour is reserved for show content — beams, laser green, fixture-cue blue,
+  keyframe amber, the pink playhead.
+- **Why:** Chosen over "Neon club" and "Laser green": the UI must never compete
+  with the show being designed, and it reads as a calm pro tool.
+
+### One inspector, driven by selection
+- **Decision:** The right panel edits whatever was picked most recently — a
+  cue or a fixture (from the 3D view or a patch-sheet row). With nothing
+  selected it shows the workspace default: Venue (room size, rig summary) in
+  Build, Show (song, tempo, cue counts) in Program.
+- **Why:** "One place to edit" is the core beginner affordance; the old UI
+  split settings between a long sidebar and a strip under the timeline. The
+  cue editor is a single persistent element the inspector re-parents, so its
+  state (curve parameter, auto-key) survives switching selections.
+
+### Libraries + drag and drop everywhere
+- **Decision:** Build's library is fixture cards (drag into the venue, `+`, or
+  double-click). Program's library is laser patterns drawn as real thumbnails
+  from the pattern data, plus fixture effects; drag onto a timeline lane (drop
+  position snaps to the beat, lane under the cursor), or double-click / Enter
+  to add at the playhead in the first free lane.
+- **Why:** Direct manipulation is the most learnable interaction; thumbnails
+  beat names for picking a pattern. Each drop target ignores the other kind of
+  drag (patterns can't land in the venue).
+
+### Ctrl+K command search
+- **Why:** Beginners find features by describing them ("add tunnel", "house
+  light"); pros get keyboard access to everything without menus. Every command
+  shows its shortcut, which teaches the shortcuts.
+
+### Output settings live behind the status pill
+- **Decision:** The top bar shows a status pill ("Art-Net 127.0.0.1", amber when
+  following a console); clicking it opens the settings. Mode and sACN are Pro.
+- **Why:** Set once per venue, glanced at constantly — status in view, settings
+  out of the way. Remembered per computer, not per show.
+
+### Atmosphere and tools float on the 3D view
+- **Decision:** Select/Move/Rotate + camera reset (top-left), haze / room light /
+  house light (top-right), "Hold for sparks" + a mouse hint (bottom-left), the
+  laser preview (bottom-right, Program).
+- **Why:** These change how you *see* or *touch* the venue, so they sit on it.
+  The camera hint disappears for good after the first orbit; the sparks button
+  only appears when the rig has spark machines.
+
+### Not now (decided, coming in later remake stages)
+Named tracks with curves under the cue (Stage 2), fixture "Looks" with
+Intensity/Colour/Movement layers (Stage 3), the Live workspace (Stage 4),
+welcome screen + 5-step tour (Stage 5). See Roadmap.
+
+---
+
+## Shipping
+
+### Releases: tag → GitHub Actions → installer on a GitHub Release
+- **Decision:** Every finished stage bumps `package.json`'s version, adds a
+  `## vX.Y.Z` section to `CHANGELOG.md`, and pushes a `vX.Y.Z` tag. The
+  `release.yml` workflow (windows-latest) runs `npm test`, builds the NSIS
+  installer and publishes it with `gh release create` — the notes are that
+  CHANGELOG section.
+- **Why:** The user wants every update as "an exe they install". Building in CI
+  needs no tokens or extra tools on the developer's machine (the workflow's own
+  `GITHUB_TOKEN` publishes) and is reproducible. Only first-party actions
+  (`actions/checkout`, `actions/setup-node`) and the preinstalled `gh` CLI.
+  The workflow fails fast if the tag doesn't match `package.json`.
+
+### Installer: NSIS one-click, per-user
+- **Decision:** `oneClick`, `perMachine: false`, desktop + Start-menu shortcuts,
+  launches when done. Artifact `LightshowStudio-Setup-<version>.exe`.
+- **Why:** "Just run an exe they install" — no wizard pages, no admin prompt.
+- **Known:** it isn't code-signed (a certificate costs money), so SmartScreen
+  warns on first run; README and release notes explain "More info → Run anyway".
+
+### electron-builder drops `three/examples` unless told not to
+- **Decision:** `build.onNodeModuleFile` points at `scripts/builder-include.js`,
+  which force-includes `node_modules/three/examples/jsm`.
+- **Why:** electron-builder hard-codes skipping every dependency's top-level
+  `examples` folder — and three ships its addons (OrbitControls,
+  TransformControls, bloom passes) there. Without the hook the packaged app
+  opens to a blank window. A `files` pattern does **not** override this.
+- **Don't undo:** Keep the hook (and check the packaged app after any
+  dependency change — see DEV_WORKFLOW "Verify the packaged app").
+
+### The logo
+- **Decision:** A fan of coloured beams fired from a white diamond emitter (the
+  ◆ keyframe symbol) on a graphite tile. `src/ui/logo.js` generates it: the full
+  5-beam mark, and a bolder 3-beam cut for 16–32 px where thin beams smear.
+  `npm run icons` rasterises it with Electron's own Chromium into
+  `build/icon.ico` (BMP entries ≤128 px + PNG 256, the layout every Windows
+  tool incl. NSIS accepts), `build/icon.png`, `build/icon.svg` and the window
+  icon `src/assets/icon.png`.
+- **Why:** Laser show identity (beams + keyframes), readable at taskbar size,
+  and one source of truth so the top-bar mark, window icon and installer icon
+  never drift apart. No image libraries needed.
 
 ---
 
@@ -347,12 +485,19 @@ bug or a constraint we already dealt with.
 
 - **House light** (`src/viz/HouseLight.js`) is a viewport aid, **not** a DMX
   fixture — a toggleable flood (hemisphere + point + bulb) so you can see the rig.
-  It doesn't touch the hub.
+  It doesn't touch the hub. Opening a show re-hangs it for the show's room.
 - **Room brightness** drives tone-mapping **exposure** + ambient, not just ambient
   — the room shell material is near-black, so ambient alone barely changes it.
 - **Haze** drives the beam shader's `uHaze` (shared uniform across all beam
   materials) **and** a gentle scene fog. The shared-uniform trick means one slider
   moves every beam.
-- **Cold sparks share address 37 on purpose** (a mirrored pair). The patch panel
-  flags it as a collision because surfacing overlapping addresses is correct — real
+- **Cold sparks share address 37 on purpose** (a mirrored pair, now also
+  mirror-linked so moving one moves the other). The patch sheet flags it as a
+  collision (Pro) because surfacing overlapping addresses is correct — real
   consoles warn too. It's not a bug.
+- **Atmosphere** (haze, room light, house light) is one `Atmosphere` object so
+  the viewport sliders, show files and undo all go through the same setters.
+- **Shortcuts stand down only in text fields.** Space / Ctrl+Z / V-X-C still
+  work right after dragging a slider or picking a colour (the laser inspector is
+  mostly sliders); Del never deletes from a focused slider. Esc deselects only
+  when you're not typing (it used to clear a fixture mid-rename).
