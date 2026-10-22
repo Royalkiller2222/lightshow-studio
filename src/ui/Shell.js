@@ -13,6 +13,7 @@ import { icon } from './icons.js';
 export const WORKSPACES = [
   { id: 'build', label: 'Build', icon: 'build', keys: 'Ctrl+1', hint: 'Set up the venue, fixtures and patch' },
   { id: 'program', label: 'Program', icon: 'program', keys: 'Ctrl+2', hint: 'Program the show on the timeline' },
+  { id: 'live', label: 'Live', icon: 'live', keys: 'Ctrl+3', hint: 'Perform the show: section pads, masters, blackout' },
 ];
 
 const MIN = { left: 190, right: 260, bottom: 140 };
@@ -21,6 +22,7 @@ const MAX = { left: 460, right: 520 };
 const DEFAULTS = {
   build: { left: 248, right: 300, bottom: 220, open: { left: true, right: true, bottom: true } },
   program: { left: 232, right: 320, bottom: 330, open: { left: true, right: true, bottom: true } },
+  live: { left: 240, right: 270, bottom: 150, open: { left: true, right: true, bottom: true } },
 };
 
 export class Shell {

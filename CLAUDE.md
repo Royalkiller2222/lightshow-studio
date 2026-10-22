@@ -92,8 +92,8 @@ Two tracks, both user-approved:
 1. **The UI remake** (Oct 2026) — "as user friendly and simple as possible with
    advanced things, pros and beginner friendly". Five stages: **1 new layout +
    look ✔ (v0.3.0)**, **2 named-track timeline with curves under the cue ✔
-   (v0.4.0)**, **3 fixture "Looks" with layers ✔ (v0.5.0)**, 4 Live workspace
-   (next), 5 welcome screen + tour.
+   (v0.4.0)**, **3 fixture "Looks" with layers ✔ (v0.5.0)**, **4 Live workspace ✔
+   (v0.6.0)**, 5 welcome screen + tour (next).
    The design choices were made by the user via multiple-choice — don't
    re-litigate them; see DESIGN_DECISIONS "The interface".
 2. **The laser pivot** — a **Pangolin BEYOND-style laser-show designer**. The

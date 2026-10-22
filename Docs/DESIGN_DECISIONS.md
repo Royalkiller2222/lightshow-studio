@@ -508,9 +508,30 @@ option won each time. **Don't re-litigate these** — refine within them.
   playhead, else onto a **new** track — a clip stacked exactly on another is
   invisible and confusing.
 
-### Not now (decided, coming in later remake stages)
-The Live workspace (Stage 4), welcome screen + 5-step tour (Stage 5). See
-Roadmap.
+### Live workspace (remake Stage 4, v0.6.0)
+- **Decision:** A third workspace for performing the pre-programmed show
+  (`ui/LivePanel.js`): section pads from the timeline markers (+ Start),
+  quantised jumps (Now / Next beat / Next bar, Pro), masters (brightness, speed,
+  size), blackout, sparks, fullscreen, and a now/next strip with a song overview.
+- **Why:** The user chose "perform the programmed show" for Live before the
+  auto-preset exists; markers double as the song's sections, so nothing new has
+  to be authored to perform. Quantised jumps keep cuts on the music.
+- **Masters live on `engine.masters`** and are applied at output: dimmer scales
+  the HTP intensity in `_flush()` and the laser brightness; size scales the
+  laser and movement layers' swing; blackout zeroes intensity, blanks the laser
+  and blocks spark triggers. They are **performance state** — not saved with
+  the show, not undoable (a show file shouldn't open blacked out).
+- **Speed uses a warped clock:** `engine._warp` accumulates (speed − 1) × dt, so
+  effect time = cue-local time + warp. Changing the fader changes the *rate*
+  smoothly instead of jumping every effect's phase (as `t × speed` would); a
+  seek resets it. Because the warped time drives both Hz and beat-synced
+  effects, the bpm passed to effects is **not** also scaled.
+- **Keys:** B (blackout) works in every workspace; 1–9, ←/→ and F only in Live.
+- `[data-ws-only]` takes a space-separated list (`"program live"`) — CSS uses
+  `~=` so one element can belong to several workspaces.
+
+### Not now (decided, coming in a later remake stage)
+Welcome screen + 5-step tour (Stage 5). See Roadmap.
 
 ---
 

@@ -159,7 +159,12 @@ export class TopBar {
         ${k('Ctrl+K', 'Search every command')}
         ${k('Ctrl+Z', 'Undo')}${k('Ctrl+Y', 'Redo')}
         ${k('Ctrl+S', 'Save the show')}${k('Ctrl+O', 'Open a show')}
-        ${k('Ctrl+1', 'Build workspace')}${k('Ctrl+2', 'Program workspace')}
+        ${k('Ctrl+1', 'Build workspace')}${k('Ctrl+2', 'Program workspace')}${k('Ctrl+3', 'Live workspace')}
+        ${k('B', 'Blackout on / off')}
+        <span class="hd">Program</span>
+        ${k('M', 'Add a marker at the playhead')}${k('Ctrl+wheel', 'Zoom the timeline')}
+        <span class="hd">Live</span>
+        ${k('1', 'Jump to section 1 (… 9)')}${k('←', 'Previous / next section (→)')}${k('F', 'Fullscreen')}
         <span class="hd">3D view</span>
         ${k('V', 'Select tool')}${k('X', 'Move tool')}${k('C', 'Rotate tool')}
         ${k('Del', 'Delete the selected fixture or cue')}${k('Esc', 'Deselect')}

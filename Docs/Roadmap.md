@@ -27,10 +27,11 @@ interface".
   Intensity / Colour / Movement layers, a per-slot look editor, seven
   ready-made presets, effect-onto-look layer swap, show-file v3 (older files
   convert to one-layer looks).
-- **Remake Stage 4 — Live workspace — ✗ NEXT.** Section pads from timeline
-  markers, brightness/speed/size masters, blackout, sparks, fullscreen.
-- Remake Stage 5 — **first run**: welcome screen (Demo / Empty venue / Open +
-  Simple or Pro) and a skippable 5-step tour; more empty-state hints.
+- **Remake Stage 4 — Live workspace — ✔ v0.6.0.** Section pads from timeline
+  markers (1–9, ←/→), quantised jumps, brightness/speed/size masters, blackout
+  (B), sparks, fullscreen (F), now/next strip with song overview.
+- **Remake Stage 5 — first run — ✗ NEXT.** Welcome screen (Demo / Empty venue /
+  Open + Simple or Pro) and a skippable 5-step tour; more empty-state hints.
 
 **The laser track** (BEYOND-style designer) continues after the remake. The
 user runs primarily laser shows. The cue system pivoted from per-attribute

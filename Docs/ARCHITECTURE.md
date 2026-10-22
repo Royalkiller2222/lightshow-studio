@@ -17,7 +17,7 @@ model.
 │  patterns +  │                                           │                  │
 │  effects)    │                                           │                  │
 ├──────────────┴──────────────────────────────────────────┴──────────────────┤
-│ #bottom: Build → PatchSheet · Program → TimelinePanel                       │
+│ #bottom: Build → PatchSheet · Program → TimelinePanel · Live → now/next bar │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -111,6 +111,9 @@ src/
                          drag to the timeline / double-click to add.
     PatchSheet.js        Build bottom panel: fixture list + DMX columns (Pro).
     CommandPalette.js    Ctrl+K search over every command.
+    LivePanel.js         Live workspace: section pads (left), masters (right),
+                         now/next strip + song overview (bottom); quantised
+                         jumps; writes engine.masters.
     icons.js / logo.js   Hand-drawn SVG icon set; the logo generator.
     dom.js / overlays.js Helpers (esc, fmtTime, colour, prefs, more()); popovers
                          and toasts.

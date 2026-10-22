@@ -46,7 +46,7 @@ export class ViewportOverlay {
         <button type="button" class="btn spark-btn" data-act="spark" title="Hold to fire every cold spark machine" hidden>${icon('sparkles')}Hold for sparks</button>
         <div class="vo-hint${this._hintGone ? ' gone' : ''}" data-role="hint">Left-drag to orbit · right-drag to pan · scroll to zoom</div>
       </div>
-      <div class="vo-br float" data-ws-only="program">
+      <div class="vo-br float" data-ws-only="program live">
         <canvas width="304" height="228" data-role="laser" aria-label="Laser output preview"></canvas>
         <div class="cap"><span>Laser output</span><span data-role="laser-state">idle</span></div>
       </div>

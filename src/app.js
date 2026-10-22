@@ -44,6 +44,7 @@ import { FixtureLibrary } from './ui/FixtureLibrary.js';
 import { ContentLibrary } from './ui/ContentLibrary.js';
 import { PatchSheet } from './ui/PatchSheet.js';
 import { CommandPalette } from './ui/CommandPalette.js';
+import { LivePanel } from './ui/LivePanel.js';
 import { toast } from './ui/overlays.js';
 import { isTypingTarget, prefs } from './ui/dom.js';
 
@@ -268,6 +269,16 @@ const topBar = new TopBar(document.getElementById('topbar'), {
 
 const palette = new CommandPalette(commands);
 
+const live = new LivePanel({
+  sections: document.getElementById('live-sections'),
+  masters: document.getElementById('live-masters'),
+  bar: document.getElementById('livebar'),
+}, {
+  transport, engine, shell,
+  getLength: () => timeline.length,
+  onSpark: (on) => { engine.manualSpark = on; },
+});
+
 // ---------- Selection -> inspector ----------
 // The inspector follows the most recent pick: a timeline item (cue, track or
 // marker) or a fixture; with nothing selected it shows the workspace's default
@@ -483,6 +494,9 @@ function commands() {
   add('View', 'Switch to Simple mode', () => shell.setPro(false), '', () => shell.pro);
   add('View', 'Switch to Pro mode', () => shell.setPro(true), '', () => !shell.pro);
   add('Output', 'Output settings…', () => topBar.openOutput());
+  add('Live', 'Blackout on / off', () => live.toggleBlackout(), 'B');
+  add('Live', 'Fullscreen', () => live.toggleFullscreen(), 'F');
+  add('Live', 'Reset masters', () => { Object.assign(engine.masters, { dimmer: 1, speed: 1, size: 1 }); live.syncMasters(); });
   add('Help', 'Keyboard shortcuts', () => topBar.openHelp(), '?');
   return list;
 }
@@ -504,6 +518,15 @@ window.addEventListener('keydown', (e) => {
   const ws = ctrl && WORKSPACES[Number(k) - 1];
   if (ws) { e.preventDefault(); shell.setWorkspace(ws.id); return; }
   if (ctrl || e.altKey) return;
+
+  // Live workspace: pads on 1–9, ← / → sections, B blackout, F fullscreen.
+  if (shell.workspace === 'live') {
+    if (/^[1-9]$/.test(e.key)) { live.jump(Number(e.key) - 1); return; }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); live.step(-1); return; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); live.step(1); return; }
+    if (k === 'f') { live.toggleFullscreen(); return; }
+  }
+  if (k === 'b') { live.toggleBlackout(); return; }
 
   switch (k) {
     case 'v': setTool('select'); break;
@@ -541,6 +564,7 @@ function animate() {
   inspector.frame();
   topBar.frame();
   overlay.frame();
+  live.frame();
   overlay.setLaserState(laserRig.active ? 'live' : 'idle');
 
   controls.update();

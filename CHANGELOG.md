@@ -3,6 +3,35 @@
 Each `## vX.Y.Z` section below becomes the notes of that version's GitHub
 Release (see `.github/workflows/release.yml`). Newest first.
 
+## v0.6.0 — 2026-10-22
+
+The Live workspace: perform the show you programmed.
+
+**Install:** download `LightshowStudio-Setup-0.6.0.exe` below and run it. It
+updates an existing install. Windows may say "Windows protected your PC" (the
+installer isn't code-signed yet); click **More info → Run anyway**.
+
+### Live workspace (Ctrl+3)
+- **Section pads:** one pad for each timeline marker, plus Start. Click a pad
+  or press **1–9** to jump there; **← / →** step between sections. The playing
+  section is highlighted.
+- **Jump on the music (Pro):** set jumps to happen *Now*, on the *Next beat*
+  or on the *Next bar*. A queued pad blinks until the jump lands.
+- **Masters:**
+  - **Brightness** scales every light and the laser.
+  - **Speed** speeds effects up or slows them down smoothly, without jumps.
+  - **Size** scales the laser and how far moving heads swing.
+  - Double-click a master to reset it.
+- **Blackout** (**B**, anywhere in the app) kills all light, laser and spark
+  output, with a clear BLACKOUT banner on the view.
+- **Hold for sparks** and **Fullscreen** (**F**).
+- **Now / next strip:** big play/pause and previous/next buttons, the current
+  section, a countdown to the next one, and a song overview with the section
+  marks (click to jump).
+
+Masters are performance controls: they aren't saved in the show and don't go
+through undo.
+
 ## v0.5.0 — 2026-10-22
 
 Looks: one clip is now a complete look for your fixtures.

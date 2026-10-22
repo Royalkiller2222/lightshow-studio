@@ -25,6 +25,7 @@
     <aside id="left" class="panel side" aria-label="Library">
       <div id="lib-build" class="panel-fill" data-ws-only="build"></div>
       <div id="lib-program" class="panel-fill" data-ws-only="program"></div>
+      <div id="live-sections" class="panel-fill" data-ws-only="live"></div>
     </aside>
     <div class="split v" data-split="left" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to hide"></div>
 
@@ -35,7 +36,8 @@
 
     <div class="split v" data-split="right" role="separator" aria-orientation="vertical" title="Drag to resize · double-click to hide"></div>
     <aside id="right" class="panel side" aria-label="Inspector">
-      <div id="inspector" class="panel-fill"></div>
+      <div id="inspector" class="panel-fill" data-ws-only="build program"></div>
+      <div id="live-masters" class="panel-fill" data-ws-only="live"></div>
     </aside>
   </div>
 
@@ -43,6 +45,7 @@
   <section id="bottom" class="panel" aria-label="Timeline and patch">
     <div id="patchsheet" class="panel-fill" data-ws-only="build"></div>
     <div id="timeline" class="panel-fill" data-ws-only="program"></div>
+    <div id="livebar" class="panel-fill" data-ws-only="live"></div>
   </section>
 
   <script type="module" src="app.js"></script>

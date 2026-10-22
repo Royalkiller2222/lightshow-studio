@@ -83,8 +83,9 @@ button, input, select { font: inherit; color: inherit; }
 body.simple .pro,
 body.simple .more,
 body.pro-mode .simple-only { display: none !important; }
-body[data-ws="build"] [data-ws-only]:not([data-ws-only="build"]),
-body[data-ws="program"] [data-ws-only]:not([data-ws-only="program"]) { display: none !important; }
+body[data-ws="build"] [data-ws-only]:not([data-ws-only~="build"]),
+body[data-ws="program"] [data-ws-only]:not([data-ws-only~="program"]),
+body[data-ws="live"] [data-ws-only]:not([data-ws-only~="live"]) { display: none !important; }
 
 .ico { width: 16px; height: 16px; flex: none; display: block; }
 .ico.sm { width: 14px; height: 14px; }
@@ -862,3 +863,46 @@ details.more > .more-body { padding: 2px 0 4px; }
 .look-card .sw { display: grid; grid-template-columns: repeat(3, 7px); gap: 2px; flex: none; }
 .look-card .nm { font-size: 12.5px; }
 .look-card .sb { font-size: 11px; color: var(--text-3); }
+
+/* -------------------------------------------------------------------- live */
+
+.lv-pads { display: flex; flex-direction: column; gap: 6px; }
+.lv-pad {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  min-height: 52px; padding: 0 12px; border-radius: var(--r);
+  border: 1px solid var(--line-2); background: var(--bg-2); color: var(--text-1);
+  font-size: 14px; text-align: left; cursor: pointer;
+}
+.lv-pad:hover { background: var(--bg-3); }
+.lv-pad.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.lv-pad.queued { border-color: var(--warn); animation: lv-blink 0.5s steps(2) infinite; }
+@keyframes lv-blink { 50% { background: var(--warn-soft); } }
+.lv-key { font: 600 11px var(--mono); color: var(--text-3); }
+.lv-pname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-ptime { font: 11px var(--mono); color: var(--text-3); }
+.lv-quant { margin-top: 14px; }
+.lv-fader { display: block; margin: 0 0 16px; }
+.lv-fname { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-2); margin-bottom: 4px; }
+.lv-fval { font: 12px var(--mono); color: var(--text-1); }
+.lv-fader input[type="range"] { width: 100%; height: 26px; }
+.lv-fader input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
+.lv-fader input[type="range"]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -7px; }
+.lv-blackout, .lv-big { width: 100%; height: 44px; margin-top: 8px; font-size: 13.5px; }
+.lv-blackout { border-color: rgba(229, 83, 75, 0.5); color: var(--danger-hi); }
+.lv-blackout.on { background: var(--danger); border-color: var(--danger); color: #fff; animation: lv-blink 1s steps(2) infinite; }
+.lv-blackout kbd, .lv-big kbd { margin-left: auto; }
+.lv-bar { display: flex; align-items: center; gap: 24px; height: 100%; padding: 0 20px; }
+.lv-transport { display: flex; align-items: center; gap: 6px; }
+.lv-transport .btn.icon { width: 40px; height: 40px; }
+.lv-play { width: 56px; height: 56px; }
+.lv-play .ico { width: 22px; height: 22px; }
+.lv-now { min-width: 220px; }
+.lv-label { font-size: 11px; color: var(--text-3); font-weight: 600; letter-spacing: 0.04em; }
+.lv-name { font-size: 24px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+.lv-next { font-size: 12.5px; color: var(--text-2); }
+.lv-overview { flex: 1; min-width: 160px; }
+.lv-times { display: flex; justify-content: space-between; font: 11.5px var(--mono); color: var(--text-3); margin-bottom: 4px; }
+.lv-prog { position: relative; height: 22px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line-2); cursor: pointer; overflow: hidden; }
+.lv-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft); border-right: 2px solid var(--c-play); }
+.lv-tick { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--warn); opacity: 0.8; }
+body.blackout #center::after { content: 'BLACKOUT'; position: absolute; top: 12px; left: 50%; transform: translateX(-50%); padding: 4px 12px; border-radius: 6px; background: var(--danger); color: #fff; font-weight: 700; font-size: 12px; letter-spacing: 0.1em; pointer-events: none; }

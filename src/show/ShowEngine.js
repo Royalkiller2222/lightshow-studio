@@ -40,6 +40,12 @@ export class ShowEngine {
     this.tracks = [];
     this.universe = 1;
     this.manualSpark = false;
+    // Live masters (performance controls, not saved with the show):
+    // dimmer scales all intensity + laser brightness, speed scales effect
+    // rates, size scales laser size + movement swing, blackout kills output.
+    this.masters = { dimmer: 1, speed: 1, size: 1, blackout: false };
+    this._warp = 0;
+    this._lastTime = null;
     this.laserRig = null; // set by app; renders the active laser cue
     this._selection = []; // current viewport selection, for the "Selection" group
 
@@ -157,6 +163,15 @@ export class ShowEngine {
     if (this.hub.mode !== 'internal') return;
     this._acc.clear();
 
+    // Speed master: effects run on a warped clock. The warp accumulates
+    // (speed - 1) × elapsed time, so moving the fader changes the rate smoothly
+    // instead of jumping every effect's phase; a seek (time jump) resets it.
+    const m = this.masters;
+    const dt = time - (this._lastTime ?? time);
+    this._lastTime = time;
+    if (dt > 0 && dt < 0.5) this._warp += (m.speed - 1) * dt;
+    else if (dt !== 0) this._warp = 0;
+
     // Apply lower lanes first so the top lane (lane 0) wins per channel (LTP);
     // within a lane, later-starting cues take precedence. Intensity from HTP
     // cues is accumulated as a max instead of replaced.
@@ -166,19 +181,22 @@ export class ShowEngine {
       if (cue.kind !== 'fixture' || !this.audible(cue)) continue;
       const group = this.groupFixtures(cue.groupId);
       const n = group.length;
-      const localT = time - cue.start;
+      // (the warped clock alone speeds up both Hz and beat-synced effects)
+      const localT = Math.max(0, time - cue.start + this._warp);
       const beat = (localT * bpm) / 60;
       for (const layer of cue.layers) {
         const effect = EFFECT_BY_KEY[layer.effectKey];
         if (!effect) continue;
+        // Size master scales how far movement layers swing.
+        const p = m.size !== 1 && effect.attr === 'position' ? { ...layer.params, size: (layer.params.size ?? 1) * m.size } : layer.params;
         for (let i = 0; i < n; i++) {
           this.sink.fixture = group[i];
-          effect.apply(group[i], { t: localT, beat, i, n, p: layer.params, out: this.sink, bands, bpm });
+          effect.apply(group[i], { t: localT, beat, i, n, p, out: this.sink, bands, bpm });
         }
       }
     }
 
-    if (this.manualSpark) {
+    if (this.manualSpark && !m.blackout) {
       for (const fx of this.groupFixtures('sparks')) {
         this.sink.fixture = fx;
         this.sink.trigger(true);
@@ -203,20 +221,25 @@ export class ShowEngine {
       if (!top || c.lane < top.lane || (c.lane === top.lane && c.start > top.start)) top = c;
     }
     const pat = top && PATTERN_BY_KEY[top.pattern];
-    if (!pat) { this.laserRig.blank(); return; }
+    const m = this.masters;
+    if (!pat || m.blackout || m.dimmer <= 0) { this.laserRig.blank(); return; }
     const u = Math.min(1, Math.max(0, (time - top.start) / (top.duration || 1)));
-    this.laserRig.show(pat, resolveLaserParams(top, u));
+    let p = resolveLaserParams(top, u);
+    if (m.dimmer !== 1 || m.size !== 1) p = { ...p, brightness: (p.brightness ?? 1) * m.dimmer, size: (p.size ?? 1) * m.size };
+    this.laserRig.show(pat, p);
   }
 
   /** Merge the accumulator to DMX: intensity HTP, colour/position LTP. */
   _flush() {
+    const m = this.masters;
+    const master = m.blackout ? 0 : m.dimmer;
     for (const fx of this.fixtures) {
       if (!fx.profile) continue;
       const a = this._acc.get(fx);
-      if (fx.profile.offsetOf('Dimmer') >= 0) writeAttr(fx, 'Dimmer', a ? a.dim : 0);
+      if (fx.profile.offsetOf('Dimmer') >= 0) writeAttr(fx, 'Dimmer', a ? a.dim * master : 0);
       if (a && a.rgb) writeRGB(fx, a.rgb[0], a.rgb[1], a.rgb[2]);
       if (a && a.pan != null) { writeAttr(fx, 'Pan', a.pan); writeAttr(fx, 'Tilt', a.tilt); }
-      if (fx.profile.offsetOf('Trigger') >= 0) writeAttr(fx, 'Trigger', a && a.trig ? 1 : 0);
+      if (fx.profile.offsetOf('Trigger') >= 0) writeAttr(fx, 'Trigger', a && a.trig && !m.blackout ? 1 : 0);
       if (a && a.height != null) writeAttr(fx, 'Height', a.height);
     }
   }
