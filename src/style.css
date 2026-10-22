@@ -845,3 +845,20 @@ details.more > .more-body { padding: 2px 0 4px; }
 .cmdk-item.active { background: var(--bg-4); }
 .cmdk-empty { padding: 18px; color: var(--text-3); text-align: center; font-size: 12.5px; }
 .cmdk-foot { display: flex; gap: 14px; padding: 7px 14px; border-top: 1px solid var(--line-2); color: var(--text-3); font-size: 11.5px; }
+
+/* ------------------------------------------------------------------- looks */
+
+.slot-dot { display: inline-block; width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.slot-dot.intensity { background: var(--c-int); }
+.slot-dot.color { background: var(--c-col); }
+.slot-dot.position { background: var(--c-pos); }
+.slot-dot.off { opacity: 0.18; }
+.look-dots { display: flex; gap: 2px; padding-left: 7px; flex: none; pointer-events: none; }
+.sec.layer { padding: 10px 0 0; border-top: 1px solid var(--line); }
+.sec.layer .sec-title .slot-dot { margin-right: 2px; }
+.sec.layer.off .sec-title { color: var(--text-3); }
+.look-card { display: flex; align-items: center; gap: 9px; padding: 6px; border-radius: var(--r); cursor: grab; user-select: none; }
+.look-card:hover { background: var(--bg-2); }
+.look-card .sw { display: grid; grid-template-columns: repeat(3, 7px); gap: 2px; flex: none; }
+.look-card .nm { font-size: 12.5px; }
+.look-card .sb { font-size: 11px; color: var(--text-3); }

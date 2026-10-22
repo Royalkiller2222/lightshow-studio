@@ -441,10 +441,9 @@ option won each time. **Don't re-litigate these** — refine within them.
   `cue.groupId` and `cue.lane`; `engine.syncTracks()` derives both from the
   track (lane = track index), so the HTP/LTP merge and "top laser wins" didn't
   have to change. **Call `syncTracks()` after any track/cue reassignment.**
-- **Tracks are layers, so several may drive the same fixtures.** Until Stage 3
-  "Looks" fold intensity + colour + movement into one clip, a mover look is
-  three tracks ("Movers · Movement / Colour / Intensity"). Higher track wins
-  colour/position; brightness is still HTP.
+- **Tracks are layers, so several may drive the same fixtures.** Higher track
+  wins colour/position; brightness is still HTP. (Before Looks, a mover look
+  needed three tracks; since v0.5.0 one look clip covers all three.)
 - **Clips may overlap within a track** (later-starting wins, as lanes did) —
   not forbidden, so moving things around never fails.
 - **Mute / solo:** any solo means only soloed tracks play (`engine.audible()`).
@@ -487,9 +486,31 @@ option won each time. **Don't re-litigate these** — refine within them.
   track is missing or the wrong kind gets a fresh track instead of failing.
 - **Don't undo:** Never drop v1 support silently — users have v0.3.0 files.
 
+### Looks: a fixture cue is a complete look made of layers (remake Stage 3, v0.5.0)
+- **Decision:** A fixture cue is `{ kind:'fixture', name, layers:[{effectKey,
+  params}] }` with at most one layer per slot — Intensity, Colour, Movement
+  (`show/looks.js`: `SLOTS`, `slotOf`, `makeLayer`, `setLayer`,
+  `normalizeLayers`). The engine applies every layer of an active look to the
+  track's fixtures through the same sink, so the HTP/LTP merge across tracks is
+  unchanged. Seven ready-made presets (`LOOKS`) sit in the library.
+- **Why:** The user found the per-attribute model unintuitive ("a lone Colour
+  cue shows nothing") and chose "Looks with layers" over keeping separate cues.
+  This is **not** a return to the old monolithic looks: each layer is still an
+  independent waveform effect, and looks on different tracks still layer
+  (brightest intensity wins; the higher track wins colour/movement).
+- **Editing:** the inspector shows one section per slot (effect picker incl.
+  "None" + that effect's controls; advanced under More). Dropping a single
+  effect onto a look replaces that slot. A look named automatically
+  ("Flat · Rainbow · Wave") keeps following its layers until the user renames it.
+- **Files:** version 3 stores `layers` + `name`; v1/v2 fixture cues
+  (`effectKey` + `params`) open as one-layer looks.
+- **Placement:** double-clicked library items go to a track with room at the
+  playhead, else onto a **new** track — a clip stacked exactly on another is
+  invisible and confusing.
+
 ### Not now (decided, coming in later remake stages)
-Fixture "Looks" with Intensity/Colour/Movement layers (Stage 3), the Live
-workspace (Stage 4), welcome screen + 5-step tour (Stage 5). See Roadmap.
+The Live workspace (Stage 4), welcome screen + 5-step tour (Stage 5). See
+Roadmap.
 
 ---
 

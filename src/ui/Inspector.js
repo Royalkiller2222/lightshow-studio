@@ -303,7 +303,7 @@ export class Inspector {
         <div class="sec-title">Timeline</div>
         <div class="prop"><span class="name">Tracks</span><span class="ctl">${d.engine.tracks.length}</span></div>
         <div class="prop"><span class="name">Laser cues</span><span class="ctl">${laser}</span></div>
-        <div class="prop"><span class="name">Fixture cues</span><span class="ctl">${fixture}</span></div>
+        <div class="prop"><span class="name">Looks</span><span class="ctl">${fixture}</span></div>
         <div class="prop"><span class="name">Markers</span><span class="ctl">${d.engine.markers.length}</span></div>
       </div>
       <div class="tip">${icon('help', 'sm')}<div>Drag a laser pattern or an effect from the library onto a track (or below the tracks to start a new one), then click the clip to edit it here. Click a track's name to edit the track.</div></div>`;

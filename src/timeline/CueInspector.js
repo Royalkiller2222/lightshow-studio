@@ -1,9 +1,10 @@
 // Edits the selected timeline cue; lives in the right-hand inspector panel.
 //
-// Fixture cues: the effect and its own controls (the effect lists which ones it
-// uses). Which fixtures it drives belongs to its *track*. Speed shows a beat
-// division when beat-synced and a rate in Hz when not. Rarely-touched waveform
-// details sit under "More" (Pro).
+// Fixture cues are looks: a name and up to three layers — Intensity, Colour,
+// Movement — each with an effect picker (or None) and that effect's own
+// controls (the effect lists which ones it uses). Which fixtures it drives
+// belongs to its *track*. Speed shows a beat division when beat-synced and a
+// rate in Hz when not. Rarely-touched waveform details sit under "More" (Pro).
 //
 // Laser cues get the BEYOND-style Key Effects: one row per parameter with a ◆
 // button that keys it at the playhead. Keying works like After Effects — once a
@@ -12,17 +13,22 @@
 // timeline, in lanes under the cue's track; clicking a parameter name opens its
 // lane. See Docs/DESIGN_DECISIONS.md "Keyframe envelopes".
 
-import { EFFECTS, paramsFor } from '../show/effects.js';
+import { EFFECTS } from '../show/effects.js';
 import { SHAPES, DIVISIONS, FANS } from '../show/waveforms.js';
-import { GROUPS } from '../show/ShowEngine.js';
+import { lookName } from '../show/ShowEngine.js';
+import { SLOTS, slotOf, makeLayer, setLayer, removeSlot } from '../show/looks.js';
 import { PATTERNS } from '../laser/patterns.js';
 import { LASER_PARAMS, PARAM_BY_KEY, EASES, isAnimated, valueAt, setKey, clearKeys } from '../laser/envelopes.js';
 import { icon } from '../ui/icons.js';
 import { esc, more, hexToRgb, rgbToHex, clamp } from '../ui/dom.js';
 import { snapKeyU } from './snap.js';
 
-const ATTR_LABEL = { intensity: 'Intensity', color: 'Colour', position: 'Movement' };
-const ADVANCED = ['shape', 'base', 'spread', 'fan', 'dir', 'duty'];
+/** Readout text for a look-layer control. */
+function fmtVal(k, v) {
+  if (k === 'rate') return `${(+v).toFixed(2)} Hz`;
+  if (k === 'spread') return (+v).toFixed(2);
+  return `${Math.round(v * 100)}%`;
+}
 
 /** "Colour · Rainbow" -> "Rainbow" (the effect list groups by attribute already). */
 export function effectShortName(eff) {
@@ -69,45 +75,20 @@ export class CueInspector {
   }
 
   _fixtureHtml() {
-    const opt = (list, k = 'key', l = 'label') => list.map((x) => `<option value="${x[k]}">${esc(x[l])}</option>`).join('');
-    const effOpts = ['intensity', 'color', 'position'].map((attr) => {
-      const o = EFFECTS.filter((e) => e.attr === attr && e.key !== 'sparks')
-        .map((e) => `<option value="${e.key}">${esc(effectShortName(e))}</option>`).join('');
-      return `<optgroup label="${ATTR_LABEL[attr]}">${o}</optgroup>`;
-    }).join('') + '<optgroup label="Special"><option value="sparks">Cold sparks</option></optgroup>';
-    const range = (k, min, max, step) => `<input type="range" min="${min}" max="${max}" step="${step}" data-ins="${k}" /><span class="val" data-insval="${k}"></span>`;
-    const row = (k, label, ctl) => `<label class="prop" data-ctl="${k}"><span class="name">${label}</span><span class="ctl">${ctl}</span></label>`;
-
-    const basic = [
-      row('effectKey', 'Effect', `<select data-ins="effectKey">${effOpts}</select>`),
-      row('color', 'Colour', '<input type="color" data-ins="color" />'),
-      row('color2', 'Colour 2', '<input type="color" data-ins="color2" />'),
-      row('size', 'Amount', range('size', 0, 1, 0.01)),
-      row('sync', 'Beat-sync', '<input type="checkbox" class="switch" data-ins="sync" />'),
-      row('division', 'Speed', `<select data-ins="division">${opt(DIVISIONS)}</select>`),
-      row('rate', 'Speed', range('rate', 0.05, 8, 0.05)),
-      row('band', 'Follows', '<select data-ins="band"><option value="bass">Bass</option><option value="mid">Mids</option><option value="high">Highs</option></select>'),
-      row('pan', 'Pan', range('pan', 0, 1, 0.01)),
-      row('tilt', 'Tilt', range('tilt', 0, 1, 0.01)),
-      row('duration', 'Length', '<input type="number" min="0.25" step="0.25" data-ins="duration" style="width:80px" /><span class="muted small">seconds</span>'),
-    ].join('');
-    const adv = [
-      row('shape', 'Wave shape', `<select data-ins="shape">${opt(SHAPES)}</select>`),
-      row('base', 'Floor', range('base', 0, 1, 0.01)),
-      row('spread', 'Spread', range('spread', 0, 2, 0.01)),
-      row('fan', 'Spread mode', `<select data-ins="fan">${opt(FANS)}</select>`),
-      row('dir', 'Direction', '<select data-ins="dir"><option value="1">Forward</option><option value="-1">Reverse</option></select>'),
-      row('duty', 'Duty', range('duty', 0.05, 0.95, 0.01)),
-    ].join('');
-
     return `
       <div data-view="fixture" hidden>
         <div class="ihead">
           <div class="badge fixture">${icon('moving-head')}</div>
-          <div class="txt"><div class="kicker">Fixture cue</div><div class="ititle" data-role="f-title"></div></div>
+          <div class="txt">
+            <div class="kicker">Look</div>
+            <input type="text" class="ititle-input" data-look="name" aria-label="Look name" spellcheck="false" />
+          </div>
         </div>
-        <div class="sec">${this._trackRow()}${basic}</div>
-        <div data-role="f-more">${more('fixture-cue', adv)}</div>
+        <div class="sec">
+          ${this._trackRow()}
+          <label class="prop"><span class="name">Length</span><span class="ctl"><input type="number" min="0.25" step="0.25" data-look="duration" style="width:80px" /><span class="muted small">seconds</span></span></label>
+        </div>
+        <div data-role="layers"></div>
         <div class="ifoot"><button type="button" class="btn danger" data-act="del-cue">${icon('trash', 'sm')}Delete cue</button></div>
       </div>`;
   }
@@ -224,73 +205,84 @@ export class CueInspector {
     if (d && document.activeElement !== d) d.value = +this.cue.duration.toFixed(3);
   }
 
-  // ------------------------------------------------------------ fixture cue
+  // --------------------------------------------------------------- look cue
   _fixtureRefresh(cue) {
-    const p = cue.params;
-    const set = (k, v) => { const el = this.$(`[data-ins="${k}"]`); if (el) el.value = v; };
-    set('effectKey', cue.effectKey);
-    set('duration', +cue.duration.toFixed(3));
-    this.$('[data-ins="color"]').value = rgbToHex(p.color);
-    this.$('[data-ins="color2"]').value = rgbToHex(p.color2);
-    this.$('[data-ins="sync"]').checked = !!p.sync;
-    for (const k of ['shape', 'division', 'rate', 'size', 'base', 'spread', 'fan', 'dir', 'duty', 'band', 'pan', 'tilt']) set(k, p[k]);
-    this._fixtureVals();
-    this._fixtureVisibility();
-    this._fixtureTitle();
+    const name = this.$('[data-look="name"]');
+    if (document.activeElement !== name) name.value = cue.name || '';
+    this.$('[data-look="duration"]').value = +cue.duration.toFixed(3);
+    this._renderLayers();
   }
 
-  _fixtureTitle() {
+  /** One section per slot: an effect picker (or None) + that effect's controls. */
+  _renderLayers() {
     const cue = this.cue;
-    const eff = EFFECTS.find((x) => x.key === cue.effectKey);
-    const grp = GROUPS.find((g) => g.id === cue.groupId);
-    this.$('[data-role="f-title"]').textContent = `${effectShortName(eff)} · ${grp ? grp.label : cue.groupId}`;
-  }
-
-  _fixtureVals() {
-    const p = this.cue.params;
-    const out = (k, text) => { const el = this.$(`[data-insval="${k}"]`); if (el) el.textContent = text; };
-    out('size', `${Math.round(p.size * 100)}%`);
-    out('rate', `${(+p.rate).toFixed(2)} Hz`);
-    out('base', `${Math.round(p.base * 100)}%`);
-    out('spread', (+p.spread).toFixed(2));
-    out('duty', `${Math.round(p.duty * 100)}%`);
-    out('pan', `${Math.round(p.pan * 100)}%`);
-    out('tilt', `${Math.round(p.tilt * 100)}%`);
-  }
-
-  /** Show only the controls this effect uses (Speed: division when synced, Hz when not). */
-  _fixtureVisibility() {
-    const eff = EFFECTS.find((x) => x.key === this.cue.effectKey);
-    const uses = new Set(['effectKey', 'duration', ...(eff ? eff.controls : [])]);
-    const synced = !!this.cue.params.sync;
-    if (uses.has('sync')) { if (synced) uses.delete('rate'); else uses.delete('division'); }
-    let anyAdv = false;
-    for (const row of this.fixtureView.querySelectorAll('[data-ctl]')) {
-      const on = uses.has(row.dataset.ctl);
-      row.hidden = !on;
-      if (on && ADVANCED.includes(row.dataset.ctl)) anyAdv = true;
-    }
-    this.$('[data-role="f-more"]').hidden = !anyAdv;
+    const opt = (list, cur, k = 'key', l = 'label') => list.map((x) => `<option value="${x[k]}"${String(x[k]) === String(cur) ? ' selected' : ''}>${esc(x[l])}</option>`).join('');
+    const html = SLOTS.map((slot) => {
+      const layer = cue.layers.find((l) => slotOf(l.effectKey) === slot.key);
+      const effs = EFFECTS.filter((e) => slotOf(e.key) === slot.key);
+      const pick = `<select data-slot-effect="${slot.key}"><option value="">None</option>${effs.map((e) => `<option value="${e.key}"${layer && layer.effectKey === e.key ? ' selected' : ''}>${esc(e.key === 'sparks' ? 'Cold sparks' : effectShortName(e))}</option>`).join('')}</select>`;
+      let rows = '', adv = '';
+      if (layer) {
+        const eff = EFFECTS.find((x) => x.key === layer.effectKey);
+        const p = layer.params;
+        const uses = new Set(eff ? eff.controls : []);
+        if (uses.has('sync')) { if (p.sync) uses.delete('rate'); else uses.delete('division'); }
+        const range = (k, min, max, step) => `<input type="range" min="${min}" max="${max}" step="${step}" value="${p[k]}" data-ins="${k}" data-slot="${slot.key}" /><span class="val" data-insval="${slot.key}-${k}">${fmtVal(k, p[k])}</span>`;
+        const row = (k, label, ctl) => (uses.has(k) ? `<label class="prop"><span class="name">${label}</span><span class="ctl">${ctl}</span></label>` : '');
+        const s = slot.key;
+        rows = [
+          row('color', 'Colour', `<input type="color" value="${rgbToHex(p.color)}" data-ins="color" data-slot="${s}" />`),
+          row('color2', 'Colour 2', `<input type="color" value="${rgbToHex(p.color2)}" data-ins="color2" data-slot="${s}" />`),
+          row('size', 'Amount', range('size', 0, 1, 0.01)),
+          row('sync', 'Beat-sync', `<input type="checkbox" class="switch" data-ins="sync" data-slot="${s}" ${p.sync ? 'checked' : ''} />`),
+          row('division', 'Speed', `<select data-ins="division" data-slot="${s}">${opt(DIVISIONS, p.division)}</select>`),
+          row('rate', 'Speed', range('rate', 0.05, 8, 0.05)),
+          row('band', 'Follows', `<select data-ins="band" data-slot="${s}">${opt([{ key: 'bass', label: 'Bass' }, { key: 'mid', label: 'Mids' }, { key: 'high', label: 'Highs' }], p.band)}</select>`),
+          row('pan', 'Pan', range('pan', 0, 1, 0.01)),
+          row('tilt', 'Tilt', range('tilt', 0, 1, 0.01)),
+        ].join('');
+        adv = [
+          row('shape', 'Wave shape', `<select data-ins="shape" data-slot="${s}">${opt(SHAPES, p.shape)}</select>`),
+          row('base', 'Floor', range('base', 0, 1, 0.01)),
+          row('spread', 'Spread', range('spread', 0, 2, 0.01)),
+          row('fan', 'Spread mode', `<select data-ins="fan" data-slot="${s}">${opt(FANS, p.fan)}</select>`),
+          row('dir', 'Direction', `<select data-ins="dir" data-slot="${s}">${opt([{ key: 1, label: 'Forward' }, { key: -1, label: 'Reverse' }], p.dir)}</select>`),
+          row('duty', 'Duty', range('duty', 0.05, 0.95, 0.01)),
+        ].join('');
+      }
+      return `<div class="sec layer${layer ? '' : ' off'}" data-slot-sec="${slot.key}">
+          <div class="sec-title"><span class="slot-dot ${slot.key}"></span>${slot.label}</div>
+          <label class="prop"><span class="name">Effect</span><span class="ctl">${pick}</span></label>
+          ${rows}
+          ${adv ? more(`look-${slot.key}`, adv) : ''}
+        </div>`;
+    }).join('');
+    this.$('[data-role="layers"]').innerHTML = html;
   }
 
   _onFixtureInput(e) {
-    const key = e.target.dataset.ins;
     const cue = this.cue;
-    if (!key) return;
     const el = e.target;
-    if (key === 'effectKey') {
-      cue.effectKey = el.value;
-      cue.params = paramsFor(el.value);
-      this._fixtureRefresh(cue);
+    if (el.dataset.look === 'name') { cue.name = el.value.trim() || lookName(cue.layers); this.onChange(); return; }
+    if (el.dataset.look === 'duration') { cue.duration = Math.max(0.25, parseFloat(el.value) || 0.25); this.onChange(); return; }
+    if (el.dataset.slotEffect) {
+      const slot = el.dataset.slotEffect;
+      const autoName = !cue.name || cue.name === lookName(cue.layers);
+      if (el.value) setLayer(cue, makeLayer(el.value)); else removeSlot(cue, slot);
+      if (autoName) { cue.name = lookName(cue.layers); this.$('[data-look="name"]').value = cue.name; }
+      this._renderLayers();
       this.onChange();
       return;
     }
-    if (key === 'duration') { cue.duration = Math.max(0.25, parseFloat(el.value) || 0.25); this.onChange(); return; }
-    if (key === 'color' || key === 'color2') cue.params[key] = hexToRgb(el.value);
-    else if (key === 'sync') { cue.params.sync = el.checked; this._fixtureVisibility(); }
-    else if (key === 'shape' || key === 'fan' || key === 'band') cue.params[key] = el.value;
-    else cue.params[key] = parseFloat(el.value);
-    this._fixtureVals();
+    const key = el.dataset.ins;
+    const layer = key && cue.layers.find((l) => slotOf(l.effectKey) === el.dataset.slot);
+    if (!layer) return;
+    if (key === 'color' || key === 'color2') layer.params[key] = hexToRgb(el.value);
+    else if (key === 'sync') { layer.params.sync = el.checked; this._renderLayers(); return; }
+    else if (key === 'shape' || key === 'fan' || key === 'band') layer.params[key] = el.value;
+    else layer.params[key] = parseFloat(el.value);
+    const out = this.$(`[data-insval="${el.dataset.slot}-${key}"]`);
+    if (out) out.textContent = fmtVal(key, layer.params[key]);
   }
 
   // -------------------------------------------------------------- laser cue

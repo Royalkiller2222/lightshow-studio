@@ -1,15 +1,27 @@
-// The real playback engine that replaces the hardcoded DemoShow. It owns the
-// cue list (effect clips on the timeline) and fixture groups. Each frame it
-// blacks out, then evaluates every cue active at the transport's time and
-// merges them into the UniverseHub. Cues later in the list win per channel
-// (LTP) — a simple, predictable priority while we build toward HTP/LTP layers.
+// The playback engine. It owns the timeline's tracks, cues and markers, and
+// the fixture groups. Each frame it blacks out, then evaluates every cue active
+// at the transport's time and merges them into the UniverseHub: intensity HTP
+// (brightest wins), colour/position LTP (the higher track wins). Fixture cues
+// are looks (layers of effects); the top active laser cue drives the laser.
 
-import { EFFECT_BY_KEY, paramsFor, writeAttr, writeRGB } from './effects.js';
+import { EFFECT_BY_KEY, EFFECTS, writeAttr, writeRGB } from './effects.js';
+import { makeLayer, normalizeLayers } from './looks.js';
 import { PATTERN_BY_KEY } from '../laser/patterns.js';
 import { resolveLaserParams } from '../laser/envelopes.js';
 
 let _id = 1;
 let _tid = 1;
+
+/** "Rainbow · Wave" — a default name from a look's layers. */
+export function lookName(layers) {
+  const names = (layers || []).map((l) => {
+    const e = EFFECTS.find((x) => x.key === l.effectKey);
+    if (!e) return null;
+    const i = e.label.indexOf(' · ');
+    return i >= 0 ? e.label.slice(i + 3) : e.label;
+  }).filter(Boolean);
+  return names.length ? names.join(' · ') : 'Empty look';
+}
 
 /** Default values for the 7 laser-cue parameters (BEYOND-style). */
 export function laserParams() {
@@ -115,8 +127,14 @@ export class ShowEngine {
   }
 
   // ------------------------------------------------------------------ cues
-  addCue({ effectKey = 'i-flat', groupId = 'movers', start = 0, duration = 4, lane = 0, track = null } = {}) {
-    const cue = { id: _id++, kind: 'fixture', effectKey, groupId, start, duration, lane, track, params: paramsFor(effectKey) };
+  /**
+   * A fixture cue is a *look*: up to three layers (intensity / colour /
+   * movement), each one effect with its own params (see looks.js). Pass
+   * `layers`, or a single `effectKey` for a one-layer look.
+   */
+  addCue({ effectKey = 'i-flat', layers = null, name = null, groupId = 'movers', start = 0, duration = 4, lane = 0, track = null } = {}) {
+    const ls = normalizeLayers(layers || [makeLayer(effectKey)]);
+    const cue = { id: _id++, kind: 'fixture', name: name || lookName(ls), layers: ls, groupId, start, duration, lane, track };
     this.cues.push(cue);
     if (track != null) this.syncTracks();
     return cue;
@@ -145,16 +163,18 @@ export class ShowEngine {
     const ordered = this.cues.slice().sort((a, b) => (b.lane - a.lane) || (a.start - b.start));
     for (const cue of ordered) {
       if (time < cue.start || time >= cue.start + cue.duration) continue;
-      if (!this.audible(cue)) continue;
-      const effect = EFFECT_BY_KEY[cue.effectKey];
-      if (!effect) continue;
+      if (cue.kind !== 'fixture' || !this.audible(cue)) continue;
       const group = this.groupFixtures(cue.groupId);
       const n = group.length;
       const localT = time - cue.start;
       const beat = (localT * bpm) / 60;
-      for (let i = 0; i < n; i++) {
-        this.sink.fixture = group[i];
-        effect.apply(group[i], { t: localT, beat, i, n, p: cue.params, out: this.sink, bands, bpm });
+      for (const layer of cue.layers) {
+        const effect = EFFECT_BY_KEY[layer.effectKey];
+        if (!effect) continue;
+        for (let i = 0; i < n; i++) {
+          this.sink.fixture = group[i];
+          effect.apply(group[i], { t: localT, beat, i, n, p: layer.params, out: this.sink, bands, bpm });
+        }
       }
     }
 

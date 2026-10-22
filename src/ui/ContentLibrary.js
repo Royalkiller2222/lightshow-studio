@@ -1,10 +1,12 @@
 // Program workspace library: laser patterns (drawn as real thumbnails from the
-// pattern data) and fixture effects. Drag one onto the timeline, or
-// double-click / press Enter to add it at the playhead. The search box filters
-// both lists.
+// pattern data), ready-made fixture looks, and single fixture effects. Drag one
+// onto the timeline, or double-click / press Enter to add it at the playhead.
+// An effect dropped onto a look replaces that layer. The search box filters
+// every list.
 
 import { PATTERNS } from '../laser/patterns.js';
 import { EFFECTS } from '../show/effects.js';
+import { LOOKS, SLOTS, slotOf } from '../show/looks.js';
 import { icon } from './icons.js';
 import { esc } from './dom.js';
 import { DND_TYPE } from '../timeline/TimelinePanel.js';
@@ -17,8 +19,8 @@ const GROUPS = [
 ];
 
 export class ContentLibrary {
-  /** deps: shell, onAddPattern(key), onAddEffect(key) */
-  constructor(root, { shell, onAddPattern, onAddEffect }) {
+  /** deps: shell, onAddPattern(key), onAddEffect(key), onAddLook(key) */
+  constructor(root, { shell, onAddPattern, onAddEffect, onAddLook }) {
     this.root = root;
     const pats = PATTERNS.map((p) => `
       <div class="pat" draggable="true" tabindex="0" data-kind="pattern" data-key="${p.key}" data-search="${esc(p.label.toLowerCase())} laser pattern" title="${esc(p.label)} — drag onto the timeline or double-click">
@@ -40,23 +42,37 @@ export class ContentLibrary {
         ${effectRow(EFFECTS.find((e) => e.key === 'sparks'), 'var(--c-fx)')}
       </div>`;
 
+    const looks = LOOKS.map((l) => {
+      const has = new Set(l.layers.map(([e]) => slotOf(e)));
+      const sw = SLOTS.map((s) => `<i class="slot-dot ${s.key}${has.has(s.key) ? '' : ' off'}"></i>`).join('');
+      return `
+      <div class="look-card" draggable="true" tabindex="0" data-kind="look" data-key="${l.key}" data-search="${esc(`${l.name} ${l.hint} look`.toLowerCase())}" title="${esc(l.hint)} — drag onto a fixture track or double-click">
+        <span class="sw">${sw}</span>
+        <span><span class="nm">${esc(l.name)}</span><br><span class="sb">${esc(l.hint)}</span></span>
+      </div>`;
+    }).join('');
+
     root.innerHTML = `
       <div class="ph">
         <span class="ph-title">Library</span>
         <button type="button" class="btn ghost icon sm" data-act="hide" title="Hide the library" aria-label="Hide the library">${icon('panel-left', 'sm')}</button>
       </div>
       <div class="pbody">
-        <input type="search" class="lib-search" placeholder="Search patterns and effects" aria-label="Search the library" />
+        <input type="search" class="lib-search" placeholder="Search patterns, looks and effects" aria-label="Search the library" />
         <div class="sec">
           <div class="sec-title">${icon('laser', 'sm')}Laser patterns</div>
           <div class="pat-grid">${pats}</div>
         </div>
         <div class="sec">
-          <div class="sec-title">${icon('moving-head', 'sm')}Fixture effects</div>
+          <div class="sec-title">${icon('moving-head', 'sm')}Looks</div>
+          <div data-group>${looks}</div>
+        </div>
+        <div class="sec">
+          <div class="sec-title">${icon('sliders', 'sm')}Single effects</div>
           ${groups}
         </div>
         <div class="lib-empty" data-role="none" hidden>Nothing matches that search.</div>
-        <div class="tip">${icon('help', 'sm')}<div>Drag onto the timeline, or double-click to add at the playhead.</div></div>
+        <div class="tip">${icon('help', 'sm')}<div>Drag onto the timeline, or double-click to add at the playhead. Drop a single effect onto a look to swap that layer.</div></div>
       </div>`;
 
     for (const c of root.querySelectorAll('canvas[data-thumb]')) drawPattern(c, PATTERNS.find((p) => p.key === c.dataset.thumb));
@@ -64,6 +80,7 @@ export class ContentLibrary {
     root.querySelector('[data-act="hide"]').addEventListener('click', () => shell.togglePanel('left', false));
     const add = (item) => {
       if (item.dataset.kind === 'pattern') onAddPattern(item.dataset.key);
+      else if (item.dataset.kind === 'look') onAddLook(item.dataset.key);
       else onAddEffect(item.dataset.key);
     };
     root.addEventListener('dblclick', (e) => { const it = e.target.closest('[data-kind]'); if (it) add(it); });

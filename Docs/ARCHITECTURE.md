@@ -138,9 +138,12 @@ src/
     strobe.js            Pure strobe gate helper.
 
   show/
-    ShowEngine.js        Owns cues + groups. update(): orders cues by lane, applies
-                         fixture effects via sink, _flush() (HTP intensity / LTP
-                         colour+position), _renderLaser() for laser cues.
+    ShowEngine.js        Owns tracks, cues, markers + groups. update(): orders cues
+                         by lane (track order), applies each look's layers via
+                         the sink, _flush() (HTP intensity / LTP colour+position),
+                         _renderLaser() for laser cues. lookName().
+    looks.js             Look layers: SLOTS, slotOf, makeLayer, setLayer,
+                         removeSlot, normalizeLayers; the LOOKS presets.
     effects.js           Per-attribute fixture effect registry (intensity/colour/
                          position) + waveform-driven apply + sink writers
                          (writeAttr/writeRGB) + paramsFor().
@@ -205,8 +208,11 @@ index; 0 = top = highest priority) and, for fixture cues, `groupId` from the
 track. `engine.audible(cue)` applies mute/solo. `engine.markers` holds the
 section markers `{ t, name }` (sorted).
 
-### Fixture cue (`kind: 'fixture'`)
-`{ effectKey, groupId, params }`. One per-attribute effect from `effects.js`:
+### Fixture cue (`kind: 'fixture'`) — a look
+`{ name, groupId (from the track), layers: [{ effectKey, params }] }`, at most
+one layer per slot — intensity / colour / position ("Movement") — kept in slot
+order by `looks.js`. The engine runs every layer on the track's fixtures. Each
+layer is one per-attribute effect from `effects.js`:
 - **Intensity:** `i-flat`, `i-wave`, `i-audio`, `i-chase`
 - **Colour:** `c-static`, `c-rainbow`, `c-two`
 - **Position:** `p-static`, `p-circle`, `p-wave`
@@ -259,17 +265,19 @@ cue.anim = {
 
 ## Save/load shape (`core/project.js`)
 ```
-{ app:'lightshow-studio', version:2,
+{ app:'lightshow-studio', version:3,
   room:{w,d,h},
   settings:{ bpm, beatOffset, haze, brightness, house },
   fixtures:[ { type, universe, startAddress, label, pos:[x,y,z], rot:[x,y,z], mirror:index|null } ],
   tracks:[ { name, kind, groupId, mute, solo, open } ],
-  cues:[ { kind, effectKey?, groupId?, pattern?, start, duration, track:index, params, anim? } ],
+  cues:[ { kind:'laser', pattern, start, duration, track:index, params, anim? }
+       | { kind:'fixture', name, groupId, start, duration, track:index, layers:[{effectKey, params}] } ],
   markers:[ { t, name } ],
   audioName }
 ```
 Version 1 (≤ v0.3.0) had no `tracks`/`markers` and a `lane` per cue;
-`tracksFromLanes()` converts it on open. `applyProject` clears, rebuilds the
+`tracksFromLanes()` converts it on open. Versions 1–2 stored a fixture cue as a
+single `effectKey` + `params`; it opens as a one-layer look. `applyProject` clears, rebuilds the
 room (and re-hangs the house light) and fixtures (relinking mirror pairs by
 index), the tracks and markers, re-adds cues by kind onto their tracks (laser
 `anim` through `loadAnim()`), applies settings, and stops the transport.

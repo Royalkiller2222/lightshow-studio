@@ -9,7 +9,6 @@
 // the scrollbar, or following the playhead). Cue editing lives in CueInspector;
 // track and marker editing in the Inspector. All show data lives on the engine.
 
-import { EFFECTS } from '../show/effects.js';
 import { GROUPS } from '../show/ShowEngine.js';
 import { PATTERNS } from '../laser/patterns.js';
 import {
@@ -18,7 +17,8 @@ import {
 } from '../laser/envelopes.js';
 import { icon } from '../ui/icons.js';
 import { esc, clamp } from '../ui/dom.js';
-import { effectShortName } from './CueInspector.js';
+import { SLOTS, slotOf, makeLayer, setLayer, lookLayers, LOOK_BY_KEY } from '../show/looks.js';
+import { lookName } from '../show/ShowEngine.js';
 import { snapTime, snapKeyU } from './snap.js';
 
 export const DND_TYPE = 'application/x-lightshow'; // library -> timeline drag payload
@@ -27,8 +27,6 @@ const NOAUDIO_WINDOW = 30; // seconds of editable timeline when no song is loade
 const DEFAULT_LEN = 4;     // seconds for a newly added cue
 const HIT = 7;             // px radius for grabbing a keyframe / marker
 const MAX_PPS = 400;       // most zoomed-in: px per second
-
-const ATTR_NAME = { intensity: 'Intensity', color: 'Colour', position: 'Movement' };
 
 export class TimelinePanel {
   /**
@@ -225,13 +223,17 @@ export class TimelinePanel {
   }
 
   // ================================================================ tracks
-  _defaultTrackName(kind, groupId = 'movers', attr = null) {
+  _defaultTrackName(kind, groupId = 'movers') {
     if (kind === 'laser') {
       const n = this.engine.tracks.filter((t) => t.kind === 'laser').length + 1;
       return `Laser ${n}`;
     }
+    // Fixture tracks are named after the fixtures they drive (a look covers
+    // every attribute, so there's no need for "· Colour" style names any more).
     const g = GROUPS.find((x) => x.id === groupId);
-    return attr ? `${g ? g.label : 'Fixtures'} · ${ATTR_NAME[attr] || 'Effect'}` : (g ? g.label : 'Fixtures');
+    const base = g ? g.label : 'Fixtures';
+    const n = this.engine.tracks.filter((t) => t.kind === 'fixture' && t.name.startsWith(base)).length;
+    return n ? `${base} ${n + 1}` : base;
   }
 
   addTrack(kind, { groupId = 'movers', attr = null, select = true } = {}) {
@@ -267,8 +269,9 @@ export class TimelinePanel {
     const ok = (t) => t && t.kind === kind && (kind === 'laser' || !groupHint || t.groupId === groupHint);
     if (ok(this.selectedTrack)) return this.selectedTrack;
     if (this.selected) { const t = this.engine.trackOf(this.selected); if (ok(t) && !this._overlaps(t.id, start, dur)) return t; }
-    const fits = this.engine.tracks.filter(ok);
-    return fits.find((t) => !this._overlaps(t.id, start, dur)) || fits[0] || null;
+    // No track with room here -> null, and the caller starts a new track
+    // (stacking a clip exactly on top of another one hides it).
+    return this.engine.tracks.filter(ok).find((t) => !this._overlaps(t.id, start, dur)) || null;
   }
 
   _placement(time) {
@@ -286,18 +289,30 @@ export class TimelinePanel {
     return cue;
   }
 
-  addFixtureCueAt(effectKey, time, trackId) {
+  /** Add a look cue from `layers` (+ name) on a fixture track; `group` prefers tracks driving it. */
+  _addLook(layers, name, time, trackId, group = null) {
     const { start, duration } = this._placement(time);
-    const eff = EFFECTS.find((e) => e.key === effectKey);
-    const group = effectKey === 'sparks' ? 'sparks' : null;
     let track = trackId != null ? this.engine.tracks.find((t) => t.id === trackId) : this._trackFor('fixture', start, duration, group);
     if (!track) {
       const groupId = group || 'movers';
-      track = this.engine.addTrack({ kind: 'fixture', groupId, name: this._defaultTrackName('fixture', groupId, effectKey === 'sparks' ? null : eff?.attr) });
+      track = this.engine.addTrack({ kind: 'fixture', groupId, name: this._defaultTrackName('fixture', groupId) });
     }
-    const cue = this.engine.addCue({ effectKey, groupId: track.groupId, start, duration, track: track.id });
+    const cue = this.engine.addCue({ layers, name, groupId: track.groupId, start, duration, track: track.id });
     this._added(cue);
     return cue;
+  }
+
+  /** A one-layer look from a single effect. */
+  addFixtureCueAt(effectKey, time, trackId) {
+    const layers = [makeLayer(effectKey)];
+    return this._addLook(layers, lookName(layers), time, trackId, effectKey === 'sparks' ? 'sparks' : null);
+  }
+
+  /** A ready-made look from the library (looks.js). */
+  addLookAt(key, time, trackId) {
+    const preset = LOOK_BY_KEY[key];
+    if (!preset) return null;
+    return this._addLook(lookLayers(key), preset.name, time, trackId, preset.group || null);
   }
 
   _added(cue) {
@@ -456,10 +471,12 @@ export class TimelinePanel {
       label = pat ? pat.label : cue.pattern;
       keys = keyTimes(cue).map((t) => `<span class="tl-kf" style="left:${t * 100}%"></span>`).join('');
     } else {
-      label = effectShortName(EFFECTS.find((x) => x.key === cue.effectKey));
+      label = cue.name || 'Look';
+      // One dot per layer (intensity / colour / movement) shows what the look does.
+      keys = `<span class="look-dots">${SLOTS.map((s) => `<i class="slot-dot ${s.key}${cue.layers.some((l) => slotOf(l.effectKey) === s.key) ? '' : ' off'}"></i>`).join('')}</span>`;
     }
     el.title = `${label} — drag to move (Shift: no snap), drag the right edge to resize`;
-    el.innerHTML = `<span class="tl-cue-label">${esc(label)}</span>${keys}<span class="tl-cue-grip"></span>`;
+    el.innerHTML = `${laser ? '' : keys}<span class="tl-cue-label">${esc(label)}</span>${laser ? keys : ''}<span class="tl-cue-grip"></span>`;
     return el;
   }
 
@@ -756,15 +773,30 @@ export class TimelinePanel {
     try { item = JSON.parse(e.dataTransfer.getData(DND_TYPE)); } catch { this._clearGhost(); return; }
     const { track, time } = this._dropTarget(e, item);
     this._clearGhost();
+    // An effect dropped onto a look replaces (or adds) that layer of the look.
+    const clipEl = e.target.closest('.tl-cue');
+    const onCue = clipEl && this.engine.cues.find((c) => c.id === Number(clipEl.dataset.id));
+    if (item.kind === 'effect' && onCue && onCue.kind === 'fixture') {
+      const autoName = !onCue.name || onCue.name === lookName(onCue.layers);
+      setLayer(onCue, makeLayer(item.key));
+      if (autoName) onCue.name = lookName(onCue.layers);
+      this.render();
+      this.selectCue(onCue);
+      this.o.onEdit?.();
+      return;
+    }
+    if (item.kind === 'look') {
+      this.addLookAt(item.key, time, track && track.kind === 'fixture' ? track.id : undefined);
+      return;
+    }
     if (item.kind === 'pattern') {
       const t = track || this.engine.addTrack({ kind: 'laser', name: this._defaultTrackName('laser'), open: true });
       this.addLaserCueAt(item.key, time, t.id);
     } else if (item.kind === 'effect') {
       let t = track;
       if (!t) {
-        const eff = EFFECTS.find((x) => x.key === item.key);
         const groupId = item.key === 'sparks' ? 'sparks' : 'movers';
-        t = this.engine.addTrack({ kind: 'fixture', groupId, name: this._defaultTrackName('fixture', groupId, item.key === 'sparks' ? null : eff?.attr) });
+        t = this.engine.addTrack({ kind: 'fixture', groupId, name: this._defaultTrackName('fixture', groupId) });
       }
       this.addFixtureCueAt(item.key, time, t.id);
     }

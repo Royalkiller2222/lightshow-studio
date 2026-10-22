@@ -23,11 +23,12 @@ interface".
   aligned to the music; section markers on a bar ruler; zoom / scroll / fit /
   follow-playhead; zoomable waveform; show-file v2 with automatic v1
   migration.
-- **Remake Stage 3 — fixture Looks — ✗ NEXT.** One clip = a complete look with
-  Intensity / Colour / Movement layers (folds today's three "Movers · …"
-  tracks into one); ready-made presets in the library.
-- Remake Stage 4 — **Live** workspace: section pads from timeline markers,
-  brightness/speed/size masters, blackout, sparks, fullscreen.
+- **Remake Stage 3 — fixture Looks — ✔ v0.5.0.** One clip = a complete look with
+  Intensity / Colour / Movement layers, a per-slot look editor, seven
+  ready-made presets, effect-onto-look layer swap, show-file v3 (older files
+  convert to one-layer looks).
+- **Remake Stage 4 — Live workspace — ✗ NEXT.** Section pads from timeline
+  markers, brightness/speed/size masters, blackout, sparks, fullscreen.
 - Remake Stage 5 — **first run**: welcome screen (Demo / Empty venue / Open +
   Simple or Pro) and a skippable 5-step tour; more empty-state hints.
 

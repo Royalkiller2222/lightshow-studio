@@ -3,6 +3,36 @@
 Each `## vX.Y.Z` section below becomes the notes of that version's GitHub
 Release (see `.github/workflows/release.yml`). Newest first.
 
+## v0.5.0 — 2026-10-22
+
+Looks: one clip is now a complete look for your fixtures.
+
+**Install:** download `LightshowStudio-Setup-0.5.0.exe` below and run it. It
+updates an existing install. Windows may say "Windows protected your PC" (the
+installer isn't code-signed yet); click **More info → Run anyway**.
+
+### Looks
+- A fixture cue is now a **look** with up to three layers: **Intensity**,
+  **Colour** and **Movement**. Each layer has its own effect and settings, and
+  can be set to None.
+- Click a look to edit it on the right: rename it, then pick and tune each
+  layer. Advanced waveform settings sit under "More" in Pro mode.
+- The **Looks** section of the library has seven ready-made looks: Rainbow
+  wave, Bass hits, Circle chase, Pulse sweep, Warm wash, White strobe and
+  Spark burst. Drag one onto a fixture track, or double-click it.
+- Drop a **single effect onto a look** to swap that layer (for example, drop
+  Two-colour onto a look to replace its colour).
+- Coloured dots on each clip show which layers a look uses.
+- The demo's three "Movers · …" tracks are now one Movers track playing a
+  single look.
+
+### Also
+- When no track has room at the playhead, a new clip goes onto a new track
+  instead of hiding on top of another clip.
+- New fixture tracks are named after their fixtures ("Movers", "Movers 2").
+- Show files are now version 3. Older files open automatically: each old
+  fixture cue becomes a one-layer look.
+
 ## v0.4.0 — 2026-10-22
 
 A new timeline built like a music app: named tracks, keyframe curves under

@@ -22,6 +22,7 @@ import { HouseLight } from './viz/HouseLight.js';
 import { Atmosphere } from './viz/Atmosphere.js';
 import { ShowEngine, GROUPS } from './show/ShowEngine.js';
 import { EFFECTS } from './show/effects.js';
+import { LOOKS, lookLayers } from './show/looks.js';
 import { Patch } from './patch/Patch.js';
 import { FIXTURE_TYPES, fixtureType } from './fixtures/registry.js';
 import { PlacementController } from './placement/PlacementController.js';
@@ -90,19 +91,12 @@ const fixtures = rig.fixtures;
 
 // ---------- Show engine + the demo show ----------
 const engine = new ShowEngine(hub, fixtures);
-// Demo tracks: a laser track on top, then the movers' look as three layered
-// tracks (movement, colour, intensity) — Stage 3 "Looks" will fold those into
-// one clip. Two section markers show off the ruler.
+// Demo show: a laser track on top and a "Movers" track playing one look
+// (intensity + rainbow colour + pan wave). Two section markers on the ruler.
 const tLaser = engine.addTrack({ kind: 'laser', name: 'Laser 1', open: true });
-const tMove = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers · Movement' });
-const tColor = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers · Colour' });
-const tInt = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers · Intensity' });
+const tMovers = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers' });
 engine.markers = [{ t: 0, name: 'Intro' }, { t: 8, name: 'Build' }];
-engine.addCue({ effectKey: 'i-flat', start: 0, duration: 16, track: tInt.id });
-const seedColor = engine.addCue({ effectKey: 'c-rainbow', start: 0, duration: 16, track: tColor.id });
-seedColor.params.division = 4; seedColor.params.spread = 1;
-const seedMove = engine.addCue({ effectKey: 'p-wave', start: 0, duration: 16, track: tMove.id });
-seedMove.params.size = 0.6; seedMove.params.division = 4; seedMove.params.spread = 0.5; seedMove.params.tilt = 0.72;
+engine.addCue({ layers: lookLayers('rainbow-wave'), name: 'Rainbow wave', start: 0, duration: 16, track: tMovers.id });
 // A BEYOND-style laser cue (vector pattern + the 7 parameters) with two
 // keyframed Key Effects: a full spin and a size swell across the cue.
 const seedLaser = engine.addLaserCue({ pattern: 'tunnel', start: 0, duration: 16, track: tLaser.id });
@@ -230,6 +224,7 @@ new ContentLibrary(document.getElementById('lib-program'), {
   shell,
   onAddPattern: (key) => timeline.addLaserCueAt(key),
   onAddEffect: (key) => timeline.addFixtureCueAt(key),
+  onAddLook: (key) => timeline.addLookAt(key),
 });
 
 const patchSheet = new PatchSheet(document.getElementById('patchsheet'), {
@@ -467,7 +462,8 @@ function commands() {
   for (const w of WORKSPACES) add('Go to', `${w.label} workspace`, () => shell.setWorkspace(w.id), w.keys);
   for (const t of FIXTURE_TYPES) add('Add fixture', t.label, () => { shell.setWorkspace('build'); addFixture(t.key); });
   for (const p of PATTERNS) add('Add laser cue', p.label, () => { shell.setWorkspace('program'); timeline.addLaserCueAt(p.key); });
-  for (const e of EFFECTS) add('Add fixture cue', effectShortName(e) + (e.attr === 'color' ? ' (colour)' : e.attr === 'position' ? ' (movement)' : ''), () => { shell.setWorkspace('program'); timeline.addFixtureCueAt(e.key); });
+  for (const l of LOOKS) add('Add look', l.name, () => { shell.setWorkspace('program'); timeline.addLookAt(l.key); });
+  for (const e of EFFECTS) add('Add effect', effectShortName(e) + (e.attr === 'color' ? ' (colour)' : e.attr === 'position' ? ' (movement)' : ''), () => { shell.setWorkspace('program'); timeline.addFixtureCueAt(e.key); });
   add('Timeline', 'Add a marker at the playhead', () => { shell.setWorkspace('program'); timeline.addMarker(); }, 'M');
   add('Timeline', 'Add a laser track', () => { shell.setWorkspace('program'); timeline.addTrack('laser'); });
   add('Timeline', 'Add a fixture track', () => { shell.setWorkspace('program'); timeline.addTrack('fixture'); });

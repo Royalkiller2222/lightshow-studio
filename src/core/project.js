@@ -12,8 +12,10 @@ import * as THREE from 'three';
 import { loadAnim } from '../laser/envelopes.js';
 import { EFFECT_BY_KEY } from '../show/effects.js';
 import { GROUPS } from '../show/ShowEngine.js';
+import { makeLayer } from '../show/looks.js';
 
-export const PROJECT_VERSION = 2; // 2: named tracks + markers (1: anonymous lanes)
+// 3: fixture cues are looks (layers) · 2: named tracks + markers · 1: anonymous lanes
+export const PROJECT_VERSION = 3;
 
 const ATTR_NAME = { intensity: 'Intensity', color: 'Colour', position: 'Movement' };
 
@@ -80,12 +82,18 @@ export function serializeProject(ctx) {
       };
     }),
     tracks: engine.tracks.map((t) => ({ name: t.name, kind: t.kind, groupId: t.groupId, mute: t.mute, solo: t.solo, open: t.open })),
-    cues: engine.cues.map((c) => ({
-      kind: c.kind, effectKey: c.effectKey, groupId: c.groupId, pattern: c.pattern,
-      start: c.start, duration: c.duration, track: trackIdx.get(c.track) ?? 0,
-      params: { ...c.params, color: [...c.params.color] },
-      anim: c.anim ? structuredClone(c.anim) : undefined, // laser keyframe envelopes
-    })),
+    cues: engine.cues.map((c) => (c.kind === 'laser'
+      ? {
+        kind: 'laser', pattern: c.pattern,
+        start: c.start, duration: c.duration, track: trackIdx.get(c.track) ?? 0,
+        params: { ...c.params, color: [...c.params.color] },
+        anim: c.anim ? structuredClone(c.anim) : undefined, // laser keyframe envelopes
+      }
+      : {
+        kind: 'fixture', name: c.name, groupId: c.groupId,
+        start: c.start, duration: c.duration, track: trackIdx.get(c.track) ?? 0,
+        layers: c.layers.map((l) => ({ effectKey: l.effectKey, params: structuredClone(l.params) })),
+      })),
     markers: (engine.markers || []).map((m) => ({ t: m.t, name: m.name })).sort((x, y) => x.t - y.t),
     audioName: audio.name || null,
   };
@@ -145,8 +153,14 @@ export function applyProject(ctx, data, { keepTransport = false } = {}) {
     const track = trackFor(c, i).id;
     const cue = c.kind === 'laser'
       ? engine.addLaserCue({ pattern: c.pattern, start: c.start, duration: c.duration, track })
-      : engine.addCue({ effectKey: c.effectKey, groupId: c.groupId, start: c.start, duration: c.duration, track });
-    if (c.params) cue.params = { ...cue.params, ...c.params, color: [...(c.params.color || cue.params.color)] };
+      : engine.addCue({
+        // v3 stores layers; v1/v2 fixture cues were a single effect -> a one-layer look.
+        layers: Array.isArray(c.layers)
+          ? c.layers.map((l) => makeLayer(l.effectKey, l.params || {}))
+          : [makeLayer(c.effectKey || 'i-flat', c.params || {})],
+        name: c.name, groupId: c.groupId, start: c.start, duration: c.duration, track,
+      });
+    if (c.kind === 'laser' && c.params) cue.params = { ...cue.params, ...c.params, color: [...(c.params.color || cue.params.color)] };
     const anim = c.kind === 'laser' ? loadAnim(c.anim) : undefined;
     if (anim) cue.anim = anim;
   });
