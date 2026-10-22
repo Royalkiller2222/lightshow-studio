@@ -9,6 +9,7 @@ import { PATTERN_BY_KEY } from '../laser/patterns.js';
 import { resolveLaserParams } from '../laser/envelopes.js';
 
 let _id = 1;
+let _tid = 1;
 
 /** Default values for the 7 laser-cue parameters (BEYOND-style). */
 export function laserParams() {
@@ -20,6 +21,11 @@ export class ShowEngine {
     this.hub = hub;
     this.fixtures = fixtures; // live array (shared with app)
     this.cues = [];
+    // Named timeline tracks, top first. A cue belongs to one track (cue.track =
+    // track id); the track decides its target fixtures (fixture tracks), its
+    // priority (cue.lane = track index: top track wins LTP / the laser) and
+    // whether it plays (mute / solo).
+    this.tracks = [];
     this.universe = 1;
     this.manualSpark = false;
     this.laserRig = null; // set by app; renders the active laser cue
@@ -62,16 +68,65 @@ export class ShowEngine {
     }
   }
 
-  addCue({ effectKey = 'i-flat', groupId = 'movers', start = 0, duration = 4, lane = 0 } = {}) {
-    const cue = { id: _id++, kind: 'fixture', effectKey, groupId, start, duration, lane, params: paramsFor(effectKey) };
+  // ---------------------------------------------------------------- tracks
+  addTrack({ name, kind = 'fixture', groupId = 'movers', mute = false, solo = false, open = false, index = null } = {}) {
+    const track = { id: _tid++, name: name || (kind === 'laser' ? 'Laser' : 'Fixtures'), kind, groupId: kind === 'laser' ? null : groupId, mute, solo, open };
+    if (index == null || index >= this.tracks.length) this.tracks.push(track);
+    else this.tracks.splice(Math.max(0, index), 0, track);
+    this.syncTracks();
+    return track;
+  }
+
+  removeTrack(id) {
+    const i = this.tracks.findIndex((t) => t.id === id);
+    if (i < 0) return;
+    this.tracks.splice(i, 1);
+    this.cues = this.cues.filter((c) => c.track !== id);
+    this.syncTracks();
+  }
+
+  moveTrack(id, delta) {
+    const i = this.tracks.findIndex((t) => t.id === id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= this.tracks.length) return;
+    const [t] = this.tracks.splice(i, 1);
+    this.tracks.splice(j, 0, t);
+    this.syncTracks();
+  }
+
+  trackOf(cue) { return this.tracks.find((t) => t.id === cue.track) || null; }
+
+  /** Re-derive each cue's priority (lane = track index) and fixture target from its track. */
+  syncTracks() {
+    const idx = new Map(this.tracks.map((t, i) => [t.id, i]));
+    for (const c of this.cues) {
+      if (!idx.has(c.track)) continue;
+      c.lane = idx.get(c.track);
+      const t = this.tracks[c.lane];
+      if (c.kind === 'fixture' && t.groupId) c.groupId = t.groupId;
+    }
+  }
+
+  /** Mute / solo: with any track soloed, only soloed tracks play. */
+  audible(cue) {
+    const t = this.trackOf(cue);
+    if (!t) return true;
+    return this.tracks.some((x) => x.solo) ? t.solo : !t.mute;
+  }
+
+  // ------------------------------------------------------------------ cues
+  addCue({ effectKey = 'i-flat', groupId = 'movers', start = 0, duration = 4, lane = 0, track = null } = {}) {
+    const cue = { id: _id++, kind: 'fixture', effectKey, groupId, start, duration, lane, track, params: paramsFor(effectKey) };
     this.cues.push(cue);
+    if (track != null) this.syncTracks();
     return cue;
   }
 
   /** A BEYOND-style laser cue: a vector pattern + the 7 laser parameters. */
-  addLaserCue({ pattern = 'beam-fan', start = 0, duration = 4, lane = 0 } = {}) {
-    const cue = { id: _id++, kind: 'laser', pattern, start, duration, lane, params: laserParams() };
+  addLaserCue({ pattern = 'beam-fan', start = 0, duration = 4, lane = 0, track = null } = {}) {
+    const cue = { id: _id++, kind: 'laser', pattern, start, duration, lane, track, params: laserParams() };
     this.cues.push(cue);
+    if (track != null) this.syncTracks();
     return cue;
   }
 
@@ -90,6 +145,7 @@ export class ShowEngine {
     const ordered = this.cues.slice().sort((a, b) => (b.lane - a.lane) || (a.start - b.start));
     for (const cue of ordered) {
       if (time < cue.start || time >= cue.start + cue.duration) continue;
+      if (!this.audible(cue)) continue;
       const effect = EFFECT_BY_KEY[cue.effectKey];
       if (!effect) continue;
       const group = this.groupFixtures(cue.groupId);
@@ -123,6 +179,7 @@ export class ShowEngine {
     let top = null;
     for (const c of this.cues) {
       if (c.kind !== 'laser' || time < c.start || time >= c.start + c.duration) continue;
+      if (!this.audible(c)) continue;
       if (!top || c.lane < top.lane || (c.lane === top.lane && c.start > top.start)) top = c;
     }
     const pat = top && PATTERN_BY_KEY[top.pattern];

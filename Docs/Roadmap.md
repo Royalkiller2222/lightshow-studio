@@ -17,13 +17,15 @@ interface".
   venue / show), fixture library + patch sheet, pattern/effect library with
   drag-and-drop to the timeline, numeric fixture editing, toasts, "Edited"
   flag. Logo + app icons, NSIS installer, release workflow.
-- **Remake Stage 2 — named-track timeline — ✗ NEXT.** Tracks per target
-  ("Laser 1", "Movers", "Sparks") with mute/solo/collapse; zoom + scroll;
-  markers; keyframe curves as lanes under the cue, aligned to the music (the
-  curve editor leaves the inspector). New show-file version with automatic
-  migration of old files.
-- Remake Stage 3 — fixture **Looks**: one clip = a complete look with
-  Intensity / Colour / Movement layers; ready-made presets in the library.
+- **Remake Stage 2 — named-track timeline — ✔ v0.4.0.** Named laser / fixture
+  tracks (target fixtures per track, mute/solo, rename, reorder, delete);
+  clips move between tracks; keyframe curve lanes under open laser tracks,
+  aligned to the music; section markers on a bar ruler; zoom / scroll / fit /
+  follow-playhead; zoomable waveform; show-file v2 with automatic v1
+  migration.
+- **Remake Stage 3 — fixture Looks — ✗ NEXT.** One clip = a complete look with
+  Intensity / Colour / Movement layers (folds today's three "Movers · …"
+  tracks into one); ready-made presets in the library.
 - Remake Stage 4 — **Live** workspace: section pads from timeline markers,
   brightness/speed/size masters, blackout, sparks, fullscreen.
 - Remake Stage 5 — **first run**: welcome screen (Demo / Empty venue / Open +
@@ -129,9 +131,9 @@ V2.1. Leans: **(P)** pre-programmed, **(L)** live/busking.
   follow/auto-go; cuelists with tracking.
 - **V2.4 — Live control / busking (L).** On-screen executors (faders + flash),
   a programmer (manual overrides, record-to-cue), rate/size masters, MIDI/OSC.
-- **V2.5 — Timeline & automation (P).** Timeline zoom/scroll, markers, parameter
-  keyframes/automation curves (✔ for laser cues via Stage 2; fixture cues
-  still static), timecode (SMPTE LTC/MTC) sync.
+- **V2.5 — Timeline & automation (P).** Timeline zoom/scroll ✔, markers ✔
+  (remake Stage 2), parameter keyframes/automation curves (✔ for laser cues;
+  fixture cues still static), timecode (SMPTE LTC/MTC) sync.
 - **V2.6 — Fixture realism.** Gobo (+rotation), prism, iris, focus/frost, colour
   wheel, CMY/CTO, shutter/strobe; GDTF/MVR import.
 - **V2.7 — Output & I/O.** Multi-universe management, sACN priorities, Enttec USB

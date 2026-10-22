@@ -20,7 +20,7 @@ const MAX = { left: 460, right: 520 };
 
 const DEFAULTS = {
   build: { left: 248, right: 300, bottom: 220, open: { left: true, right: true, bottom: true } },
-  program: { left: 232, right: 320, bottom: 226, open: { left: true, right: true, bottom: true } },
+  program: { left: 232, right: 320, bottom: 330, open: { left: true, right: true, bottom: true } },
 };
 
 export class Shell {

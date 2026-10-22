@@ -1,6 +1,6 @@
 {
   "name": "lightshow-studio",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "3D lightshow designer and DMX previsualizer",
   "author": "Lightshow Studio",
   "homepage": "https://github.com/Royalkiller2222/lightshow-studio",
@@ -35,7 +35,14 @@
     ],
     "onNodeModuleFile": "scripts/builder-include.js",
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico"
     },
     "nsis": {

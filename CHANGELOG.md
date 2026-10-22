@@ -3,6 +3,54 @@
 Each `## vX.Y.Z` section below becomes the notes of that version's GitHub
 Release (see `.github/workflows/release.yml`). Newest first.
 
+## v0.4.0 — 2026-10-22
+
+A new timeline built like a music app: named tracks, keyframe curves under
+the music, section markers, and zoom.
+
+**Install:** download `LightshowStudio-Setup-0.4.0.exe` below and run it. It
+updates an existing install. Windows may say "Windows protected your PC" (the
+installer isn't code-signed yet); click **More info → Run anyway**.
+
+### Named tracks
+- The timeline is now a list of **tracks** ("Laser 1", "Movers · Colour"…).
+  Each track has a name, a kind (laser or fixture) and, for fixture tracks,
+  the fixtures it drives.
+- **Mute (M) and solo (S)** on every track. With any track soloed, only the
+  soloed tracks play.
+- Click a track's name to edit it in the inspector: rename it, change its
+  fixtures, move it up or down (higher tracks win), or delete it.
+  Double-click the name to rename it right there.
+- Drag a pattern or effect onto a track to add a cue, or below the tracks to
+  start a new track. Double-clicking a library item picks a sensible track
+  for you.
+- Drag clips between tracks of the same kind. Clips snap to beats; hold
+  Shift for free placement.
+
+### Keyframe curves under the music
+- Laser tracks open (the ▸ arrow) to show a curve lane for every animated
+  Key Effect, lined up with the song.
+- In a lane: click to add a keyframe, drag to move it (half-beat snapping,
+  Shift for free), double-click or press Del to remove it. Clicking a lane
+  selects the cue under the pointer.
+- Pressing ◆ or clicking a Key Effect's name in the inspector opens its
+  lane.
+
+### Markers, zoom and scrolling
+- **Section markers** on the ruler (Intro, Drop…). Press M or use the Marker
+  button to add one at the playhead, or double-click the ruler. Drag a marker
+  to move it; click it to rename or delete it in the inspector. They'll
+  become pads in the Live workspace.
+- **Zoom** with Ctrl+wheel or the − / + buttons; **Fit** shows the whole show.
+  Scroll with Shift+wheel, the scrollbar, or the wheel over the ruler. The
+  view follows the playhead while playing.
+- The ruler shows bar numbers. The waveform keeps its detail as you zoom in.
+- Click empty space on a track to move the playhead there.
+
+### Show files
+- Show files are now version 2 (tracks and markers). Files from v0.3.0 and
+  earlier open automatically: each old lane becomes a named track.
+
 ## v0.3.0 — 2026-10-21
 
 The first installable release: a redesigned interface, laser keyframes, and a

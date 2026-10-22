@@ -37,10 +37,12 @@ haze and a laser drawing a spinning, breathing tunnel. With no song loaded the
   to edit its name, position, facing and DMX address in the inspector on the
   right. The patch sheet along the bottom lists everything.
 - **Program workspace** — load a song (its tempo is detected), then drag laser
-  patterns and fixture effects from the library onto the timeline. Click a cue
-  to edit it on the right. Laser cues have BEYOND-style Key Effects — size,
-  rotation, position, colour, brightness and more — each one keyframeable with
-  the ◆ buttons and the curve editor.
+  patterns and fixture effects from the library onto the timeline's named
+  tracks (or below them to start a new track). Click a cue to edit it on the
+  right. Laser cues have BEYOND-style Key Effects — size, rotation, position,
+  colour, brightness and more — each one keyframeable with the ◆ buttons;
+  open a laser track to shape the curves right under the music. Tracks have
+  mute / solo; markers (M) name the song's sections; Ctrl+wheel zooms.
 - **On the 3D view** — Select / Move / Rotate tools, a camera reset, haze, room
   light and house light, the laser output preview, and "Hold for sparks".
   Left-drag orbits, right-drag pans, scroll zooms.

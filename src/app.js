@@ -20,7 +20,7 @@ import { hazeUniform } from './viz/beam.js';
 import { Room } from './viz/Room.js';
 import { HouseLight } from './viz/HouseLight.js';
 import { Atmosphere } from './viz/Atmosphere.js';
-import { ShowEngine } from './show/ShowEngine.js';
+import { ShowEngine, GROUPS } from './show/ShowEngine.js';
 import { EFFECTS } from './show/effects.js';
 import { Patch } from './patch/Patch.js';
 import { FIXTURE_TYPES, fixtureType } from './fixtures/registry.js';
@@ -90,16 +90,22 @@ const fixtures = rig.fixtures;
 
 // ---------- Show engine + the demo show ----------
 const engine = new ShowEngine(hub, fixtures);
-// A default look on the movers (intensity + colour + movement, stacked
-// per-attribute) so the rig is alive on launch and shows the layering model.
-engine.addCue({ effectKey: 'i-flat', groupId: 'movers', start: 0, duration: 16, lane: 2 });
-const seedColor = engine.addCue({ effectKey: 'c-rainbow', groupId: 'movers', start: 0, duration: 16, lane: 1 });
+// Demo tracks: a laser track on top, then the movers' look as three layered
+// tracks (movement, colour, intensity) — Stage 3 "Looks" will fold those into
+// one clip. Two section markers show off the ruler.
+const tLaser = engine.addTrack({ kind: 'laser', name: 'Laser 1', open: true });
+const tMove = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers · Movement' });
+const tColor = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers · Colour' });
+const tInt = engine.addTrack({ kind: 'fixture', groupId: 'movers', name: 'Movers · Intensity' });
+engine.markers = [{ t: 0, name: 'Intro' }, { t: 8, name: 'Build' }];
+engine.addCue({ effectKey: 'i-flat', start: 0, duration: 16, track: tInt.id });
+const seedColor = engine.addCue({ effectKey: 'c-rainbow', start: 0, duration: 16, track: tColor.id });
 seedColor.params.division = 4; seedColor.params.spread = 1;
-const seedMove = engine.addCue({ effectKey: 'p-wave', groupId: 'movers', start: 0, duration: 16, lane: 0 });
+const seedMove = engine.addCue({ effectKey: 'p-wave', start: 0, duration: 16, track: tMove.id });
 seedMove.params.size = 0.6; seedMove.params.division = 4; seedMove.params.spread = 0.5; seedMove.params.tilt = 0.72;
-// A BEYOND-style laser cue (vector pattern + the 7 parameters) on its own lane,
-// with two keyframed Key Effects: a full spin and a size swell across the cue.
-const seedLaser = engine.addLaserCue({ pattern: 'tunnel', start: 0, duration: 16, lane: 3 });
+// A BEYOND-style laser cue (vector pattern + the 7 parameters) with two
+// keyframed Key Effects: a full spin and a size swell across the cue.
+const seedLaser = engine.addLaserCue({ pattern: 'tunnel', start: 0, duration: 16, track: tLaser.id });
 seedLaser.params.color = [0.2, 1, 0.5];
 seedLaser.anim = {
   rotZ: { ease: 'linear', keys: [{ t: 0, v: 0 }, { t: 1, v: 2 * Math.PI }] },
@@ -184,13 +190,17 @@ const cueInspector = new CueInspector({
   onChange: () => timeline.renderCues(),
   onCommit: commit,
   onDelete: (cue) => timeline.deleteCue(cue),
+  onPickParam: (cue, key) => timeline.focusCurve(cue, key),
+  onSelectTrack: (track) => timeline.selectTrack(track),
 });
 
 const timeline = new TimelinePanel(transport, audio, engine, document.getElementById('timeline'), {
   onLoadAudio: loadSong,
   onEdit: commit,
-  onSelect: (cue) => onCueSelected(cue),
+  onSelect: (kind, obj) => onTimelineSelected(kind, obj),
   onCueMoved: () => cueInspector.refreshMeta(),
+  onCurveChange: (cue) => { if (cue === cueInspector.cue) cueInspector.refresh(); },
+  onCurvePick: (key) => cueInspector.setFocus(key),
 });
 
 const overlay = new ViewportOverlay(document.getElementById('overlay'), {
@@ -237,6 +247,12 @@ const inspector = new Inspector(document.getElementById('inspector'), {
   onRemoveFixture: removeFixture,
   onSelectFixture: (fx) => editTools.select(fx),
   onLoadSong: () => timeline.pickAudio(),
+  groups: GROUPS,
+  onTrackChange: () => { engine.syncTracks(); timeline.render(); commit(); },
+  onMoveTrack: (track, delta) => timeline.moveTrack(track, delta),
+  onDeleteTrack: (track) => timeline.deleteTrack(track),
+  onMarkerChange: () => { engine.markers.sort((a, b) => a.t - b.t); commit(); },
+  onDeleteMarker: (m) => timeline.deleteMarker(m),
 });
 
 const topBar = new TopBar(document.getElementById('topbar'), {
@@ -258,14 +274,21 @@ const topBar = new TopBar(document.getElementById('topbar'), {
 const palette = new CommandPalette(commands);
 
 // ---------- Selection -> inspector ----------
-// The inspector follows the most recent pick: clicking a cue shows the cue,
-// clicking a fixture shows the fixture; with nothing selected it shows the
-// workspace's default (venue in Build, show in Program).
-let lastPicked = null;
+// The inspector follows the most recent pick: a timeline item (cue, track or
+// marker) or a fixture; with nothing selected it shows the workspace's default
+// (venue in Build, show in Program).
+let lastPicked = null; // 'fixture' | 'timeline'
+function timelinePick() {
+  if (shell.workspace !== 'program') return null;
+  if (timeline.selected) return { kind: 'cue', cue: timeline.selected };
+  if (timeline.selectedTrack) return { kind: 'track', track: timeline.selectedTrack };
+  if (timeline.selectedMarker) return { kind: 'marker', marker: timeline.selectedMarker };
+  return null;
+}
 function updateInspector() {
-  const cue = shell.workspace === 'program' ? timeline.selected : null;
+  const tl = timelinePick();
   const fx = editTools.selected;
-  if (cue && (lastPicked === 'cue' || !fx)) inspector.show({ kind: 'cue', cue });
+  if (tl && (lastPicked === 'timeline' || !fx)) inspector.show(tl);
   else if (fx) inspector.show({ kind: 'fixture', fx });
   else inspector.show(null);
 }
@@ -274,8 +297,8 @@ function onFixtureSelected(fx) {
   patchSheet.setSelected(fx);
   updateInspector();
 }
-function onCueSelected(cue) {
-  if (cue) lastPicked = 'cue';
+function onTimelineSelected(kind) {
+  if (kind) lastPicked = 'timeline';
   updateInspector();
 }
 shell.onChange(() => updateInspector());
@@ -317,14 +340,19 @@ function removeFixture(fx) {
   commit();
 }
 
-/** Del: the cue in the inspector if one is shown, else the selected fixture. */
+/** Del: whatever the inspector shows (cue / track / marker), else the selected fixture. */
 function deleteSelection() {
-  if (inspector.target?.kind === 'cue') timeline.deleteCue(inspector.target.cue);
+  const t = inspector.target;
+  if (t?.kind === 'cue') timeline.deleteCue(t.cue);
+  else if (t?.kind === 'track') timeline.deleteTrack(t.track);
+  else if (t?.kind === 'marker') timeline.deleteMarker(t.marker);
   else if (editTools.selected) removeFixture(editTools.selected);
 }
 
 function deselectAll() {
   editTools.deselect();
+  timeline.selectedTrack = null;
+  timeline.selectedMarker = null;
   timeline.selectCue(null);
 }
 
@@ -359,11 +387,15 @@ history = new History({
   // nothing, if the undo removed it).
   restore: (json) => {
     const cueIdx = engine.cues.indexOf(timeline.selected);
+    const trkIdx = engine.tracks.indexOf(timeline.selectedTrack);
+    const mkIdx = engine.markers.indexOf(timeline.selectedMarker);
     const fxIdx = patch.entries.findIndex((e) => e.fixture === editTools.selected);
     const picked = lastPicked;
     applyProject(ctx, JSON.parse(json), { keepTransport: true });
     if (fxIdx >= 0 && patch.entries[fxIdx]) editTools.select(patch.entries[fxIdx].fixture);
     if (cueIdx >= 0 && engine.cues[cueIdx]) timeline.selectCue(engine.cues[cueIdx]);
+    else if (trkIdx >= 0 && engine.tracks[trkIdx]) timeline.selectTrack(engine.tracks[trkIdx]);
+    else if (mkIdx >= 0 && engine.markers[mkIdx]) timeline.selectMarker(engine.markers[mkIdx]);
     lastPicked = picked;
     updateInspector();
     topBar.syncBpm();
@@ -436,6 +468,13 @@ function commands() {
   for (const t of FIXTURE_TYPES) add('Add fixture', t.label, () => { shell.setWorkspace('build'); addFixture(t.key); });
   for (const p of PATTERNS) add('Add laser cue', p.label, () => { shell.setWorkspace('program'); timeline.addLaserCueAt(p.key); });
   for (const e of EFFECTS) add('Add fixture cue', effectShortName(e) + (e.attr === 'color' ? ' (colour)' : e.attr === 'position' ? ' (movement)' : ''), () => { shell.setWorkspace('program'); timeline.addFixtureCueAt(e.key); });
+  add('Timeline', 'Add a marker at the playhead', () => { shell.setWorkspace('program'); timeline.addMarker(); }, 'M');
+  add('Timeline', 'Add a laser track', () => { shell.setWorkspace('program'); timeline.addTrack('laser'); });
+  add('Timeline', 'Add a fixture track', () => { shell.setWorkspace('program'); timeline.addTrack('fixture'); });
+  add('Timeline', 'Zoom in', () => timeline.zoom(1.5), 'Ctrl+wheel');
+  add('Timeline', 'Zoom out', () => timeline.zoom(1 / 1.5));
+  add('Timeline', 'Fit the whole show', () => timeline.fit());
+  for (const m of engine.markers) add('Go to marker', m.name, () => transport.seek(m.t));
   add('Tools', 'Select tool', () => setTool('select'), 'V');
   add('Tools', 'Move tool', () => setTool('move'), 'X');
   add('Tools', 'Rotate tool', () => setTool('rotate'), 'C');
@@ -476,6 +515,7 @@ window.addEventListener('keydown', (e) => {
     case 'c': setTool('rotate'); break;
     case ' ': e.preventDefault(); transport.toggle(); break; // also stops a focused button re-clicking
     case 'escape': deselectAll(); break;
+    case 'm': if (shell.workspace === 'program') timeline.addMarker(); else return; break;
     case '?': topBar.openHelp(); break;
     case '/': if (e.shiftKey) topBar.openHelp(); else return; break; // '?' on layouts that report the base key
     case 'delete': case 'backspace':

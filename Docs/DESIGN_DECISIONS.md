@@ -175,8 +175,8 @@ bug or a constraint we already dealt with.
   let you drag-extend a cue past the default window without a track loaded.
 
 ### Canvases sit absolutely inside a sized wrapper
-- **Decision:** The waveform (`.tl-wave-wrap`) and the keyframe curve editor
-  (`.env-wrap`) canvases are `position:absolute; inset:0` inside a wrapper
+- **Decision:** Every timeline canvas — ruler, waveform, curve lanes
+  (`.tl-cv`, `.crv-body`) — is `position:absolute; inset:0` inside a wrapper
   whose size comes from layout.
 - **Why:** A canvas in a flex column feeds its backing-store size (which we set
   from its CSS size × devicePixelRatio) back into layout and grows every frame;
@@ -288,6 +288,8 @@ bug or a constraint we already dealt with.
   most one key per half-beat instead of one per frame.
 
 ### Envelope editing details
+(Since v0.4.0 keys are edited in the timeline's curve lanes — see "Keyframe
+curves live under the track"; these rules carried over unchanged.)
 - **One key per time:** `setKey` updates a key within `KEY_EPS` (0.3% of the cue)
   rather than inserting; dropping a dragged key onto another replaces it (AE).
 - **Snapping:** keys snap to the half-beat grid aligned to the detected downbeat
@@ -299,8 +301,8 @@ bug or a constraint we already dealt with.
   the BEYOND basics; per-key bezier handles are a later refinement.
 - **Colour interpolates in RGB** (simple, predictable). HSV interpolation sweeps
   through hues, which could become an option.
-- **Del on the focused envelope never reaches the global handler**, which would
-  otherwise delete the fixture selected in the viewport.
+- **Del on a focused curve lane never reaches the global handler**, which would
+  otherwise delete the selected cue, track or fixture.
 
 ### `LASER_PARAMS` is the single source of truth for laser parameters
 - **Decision:** `src/laser/envelopes.js` declares each parameter's key, label,
@@ -429,10 +431,65 @@ option won each time. **Don't re-litigate these** — refine within them.
   The camera hint disappears for good after the first orbit; the sparks button
   only appears when the rig has spark machines.
 
+### Named tracks (remake Stage 2, v0.4.0)
+- **Decision:** The timeline is a list of tracks (`engine.tracks`, top first).
+  A cue belongs to one track (`cue.track` = track id). A track has a kind
+  (laser / fixture), a name, and — for fixture tracks — the fixtures it drives
+  (`groupId`), plus mute / solo / open.
+- **The target lives on the track**, not the cue: "drop it on the Movers track"
+  is how beginners think, and it's DAW-familiar for pros. The engine still reads
+  `cue.groupId` and `cue.lane`; `engine.syncTracks()` derives both from the
+  track (lane = track index), so the HTP/LTP merge and "top laser wins" didn't
+  have to change. **Call `syncTracks()` after any track/cue reassignment.**
+- **Tracks are layers, so several may drive the same fixtures.** Until Stage 3
+  "Looks" fold intensity + colour + movement into one clip, a mover look is
+  three tracks ("Movers · Movement / Colour / Intensity"). Higher track wins
+  colour/position; brightness is still HTP.
+- **Clips may overlap within a track** (later-starting wins, as lanes did) —
+  not forbidden, so moving things around never fails.
+- **Mute / solo:** any solo means only soloed tracks play (`engine.audible()`).
+- **Why:** The anonymous 5 lanes made every cue pick its own target and gave
+  no way to name, mute or reorder parts of a show.
+
+### Keyframe curves live under the track, lined up with the music
+- **Decision:** A laser track opens into one curve lane per animated Key
+  Effect (+ the parameter you last focused). Lanes span the whole timeline; each
+  laser cue on the track draws its own envelope inside its time range. Keys are
+  edited in place (click to add, drag, double-click / Del). The inspector keeps
+  the ◆ buttons, values, ease and Clear; clicking a parameter name or ◆ opens
+  its lane (`timeline.focusCurve`).
+- **Why:** The user chose "curves under the cue, aligned to the music" — hitting
+  a beat or a drop is the whole point of keyframing, and the narrow inspector
+  canvas couldn't show that. Key times are still cue-normalised (0..1), so the
+  envelope model and snapping (`timeline/snap.js`) didn't change.
+
+### Zoom, scroll and follow
+- **Decision:** The timeline view is `t0` (left-edge time) + `pps` (px/s).
+  Ctrl+wheel zooms about the cursor, Shift+wheel / the scrollbar / the wheel over
+  the ruler scroll, Fit shows everything; while playing the view pages forward
+  when the playhead leaves it. The waveform asks `AudioEngine.peaksRange()` for
+  only the visible slice (cached per view), so zooming in shows detail.
+- Clip positions are recomputed from the view on every change (`_layoutClips`);
+  rows are rebuilt only when data changes (`render`). Cheap at show sizes.
+
+### Section markers
+- **Decision:** `engine.markers = [{t, name}]` (kept sorted), drawn as flags on
+  the ruler; add with M / the Marker button / double-click the ruler; drag to
+  move (beat snap, Shift free); edit in the inspector.
+- **Why:** Songs have sections; naming them is how both beginners and pros
+  navigate a show — and they become the Live workspace's section pads (Stage 4).
+
+### Show file version 2
+- **Decision:** `version: 2` adds `tracks` and `markers`; each cue stores its
+  track index. Opening a v1 file runs `tracksFromLanes()`: one track per (old
+  lane, laser | fixture group), named from its content ("Laser 1",
+  "Movers · Colour"), in lane order so priorities are unchanged. A cue whose
+  track is missing or the wrong kind gets a fresh track instead of failing.
+- **Don't undo:** Never drop v1 support silently — users have v0.3.0 files.
+
 ### Not now (decided, coming in later remake stages)
-Named tracks with curves under the cue (Stage 2), fixture "Looks" with
-Intensity/Colour/Movement layers (Stage 3), the Live workspace (Stage 4),
-welcome screen + 5-step tour (Stage 5). See Roadmap.
+Fixture "Looks" with Intensity/Colour/Movement layers (Stage 3), the Live
+workspace (Stage 4), welcome screen + 5-step tour (Stage 5). See Roadmap.
 
 ---
 

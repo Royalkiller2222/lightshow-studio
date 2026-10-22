@@ -70,9 +70,11 @@ Show engine (timeline cues)            External console
   effects on moving heads/pars/bars) and **`laser`** (BEYOND-style vector pattern
   + 7 "Key Effect" parameters, each optionally keyframed).
 - **Timeline (`src/timeline/`, `src/audio/`)** — audio clock (`Transport`),
-  Web-Audio decode + FFT bands + auto-BPM, `TimelinePanel` (song, waveform,
-  beat grid, cue lanes, drop target) and `CueInspector` (edits the selected cue,
-  incl. the laser keyframe curve editor).
+  Web-Audio decode + FFT bands + auto-BPM, `TimelinePanel` (DAW-style: bar
+  ruler + markers, waveform, **named tracks** with mute/solo, clips, keyframe
+  curve lanes under laser tracks, zoom/scroll) and `CueInspector` (edits the
+  selected cue). Cues belong to tracks; `engine.syncTracks()` derives each
+  cue's priority (`lane`) and fixture target from its track.
 - **`src/laser/`** — vector `patterns.js`, `envelopes.js` (parameter spec + pure
   keyframe math) and `LaserRig.js` (3D beams + the flat galvo preview).
 - **UI (`src/ui/`)** — the window is *top bar / [library | 3D view | inspector] /
@@ -88,8 +90,9 @@ Two tracks, both user-approved:
 
 1. **The UI remake** (Oct 2026) — "as user friendly and simple as possible with
    advanced things, pros and beginner friendly". Five stages: **1 new layout +
-   look ✔ (v0.3.0)**, 2 named-track timeline with curves under the cue,
-   3 fixture "Looks" with layers, 4 Live workspace, 5 welcome screen + tour.
+   look ✔ (v0.3.0)**, **2 named-track timeline with curves under the cue ✔
+   (v0.4.0)**, 3 fixture "Looks" with layers (next), 4 Live workspace,
+   5 welcome screen + tour.
    The design choices were made by the user via multiple-choice — don't
    re-litigate them; see DESIGN_DECISIONS "The interface".
 2. **The laser pivot** — a **Pangolin BEYOND-style laser-show designer**. The

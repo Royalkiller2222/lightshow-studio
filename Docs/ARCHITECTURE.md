@@ -27,13 +27,15 @@ model.
   `body.simple/.pro-mode`. Everything is mounted once; CSS hides what doesn't
   belong to the current workspace (`[data-ws-only]`) or mode (`.pro`, `.more`).
 - **Selection drives the inspector** (`app.js` `updateInspector()`): the most
-  recent pick wins — a cue (`TimelinePanel.onSelect`) or a fixture
+  recent pick wins — a timeline item: cue, track or marker
+  (`TimelinePanel.onSelect(kind, obj)`) — or a fixture
   (`EditTools.onSelect`, also from patch-sheet rows); nothing selected shows the
   workspace default (Venue in Build, Show in Program). The cue editor is one
   persistent `CueInspector` element the Inspector re-parents.
 - **Drag & drop:** fixture cards → the canvas (`PlacementController`, keyed by
-  `text/plain` + the pending type set on dragstart); patterns/effects → the cue
-  lane (`TimelinePanel`, MIME type `application/x-lightshow`, JSON
+  `text/plain` + the pending type set on dragstart); patterns/effects → a track
+  of the matching kind, or the "new track" row below the tracks
+  (`TimelinePanel`, MIME type `application/x-lightshow`, JSON
   `{kind: 'pattern'|'effect', key}`). Each target ignores the other's drags.
 - **Commits:** every finished edit calls `commit()` → `History.record()`
   (snapshot, no-op if unchanged) → listeners update the top bar's undo/redo +
@@ -153,11 +155,14 @@ src/
   timeline/
     Transport.js         Master clock (audio time or free-run, looping at
                          loopEnd), bpm, beatOffset.
-    TimelinePanel.js     Song (load, waveform, beat grid), cue lanes (add/drag/
-                         resize/lane change), drop target for the library,
-                         addLaserCueAt / addFixtureCueAt / deleteCue.
+    TimelinePanel.js     The DAW-style timeline: ruler (bars, markers), song
+                         waveform, named track rows (M/S, rename, select),
+                         clips (move/resize/change track), curve lanes under
+                         open laser tracks (key editing), zoom/scroll/follow,
+                         library drop target; add/delete cues, tracks, markers.
     CueInspector.js      Edits the selected cue: fixture effect controls, or the
-                         laser Key Effects (◆, auto-key) + keyframe curve editor.
+                         laser Key Effects (◆, auto-key, ease, clear).
+    snap.js              snapTime (beat grid) / snapKeyU (half-beats + cue ends).
 
   laser/
     patterns.js          Vector pattern library (strokes in -1..1 galvo space) +
@@ -192,8 +197,13 @@ scripts/
 
 ## The cue model
 
-All cues live in `ShowEngine.cues` and render on the shared timeline. Each cue has
-`{ id, kind, start, duration, lane, params }`. Lane 0 is the top priority lane.
+All cues live in `ShowEngine.cues`; each cue has
+`{ id, kind, start, duration, track, lane, params }`. `track` is the id of its
+track in `ShowEngine.tracks` (`{ id, name, kind: 'laser'|'fixture', groupId,
+mute, solo, open }`, top first). `engine.syncTracks()` derives `lane` (= track
+index; 0 = top = highest priority) and, for fixture cues, `groupId` from the
+track. `engine.audible(cue)` applies mute/solo. `engine.markers` holds the
+section markers `{ t, name }` (sorted).
 
 ### Fixture cue (`kind: 'fixture'`)
 `{ effectKey, groupId, params }`. One per-attribute effect from `effects.js`:
@@ -239,27 +249,31 @@ cue.anim = {
 - `_renderLaser` computes `u = (time - start) / duration` and passes
   `resolveLaserParams(cue, u)` to the rig — a copy with animated params
   evaluated, or `cue.params` itself if nothing is animated.
-- Editing (`CueInspector`, in the right panel): ◆ keys the current value at the playhead; edits to an
-  animated param (or any param with **Auto-key** on) write a key at the playhead
-  — exact when paused, half-beat-quantised while playing. The envelope editor
-  shows the picked param (click a param name): click empty space = add key,
-  drag = move (half-beat snap, Shift = free), double-click / Del = remove,
-  Ease select, Clear keys (freezes the param at its current value). The cue
-  block shows a tick per key time.
+- Editing: in the inspector (`CueInspector`) ◆ keys the current value at the
+  playhead; edits to an animated param (or any param with **Auto-key** on) write
+  a key at the playhead — exact when paused, half-beat-quantised while playing;
+  Ease and Clear act on the focused parameter. In the timeline, an open laser
+  track shows one **curve lane** per animated param (+ the focused one): click
+  inside a cue's span = add key, drag = move (half-beat snap, Shift = free),
+  double-click / Del = remove. The cue block shows a tick per key time.
 
 ## Save/load shape (`core/project.js`)
 ```
-{ app:'lightshow-studio', version:1,
+{ app:'lightshow-studio', version:2,
   room:{w,d,h},
   settings:{ bpm, beatOffset, haze, brightness, house },
   fixtures:[ { type, universe, startAddress, label, pos:[x,y,z], rot:[x,y,z], mirror:index|null } ],
-  cues:[ { kind, effectKey?, groupId?, pattern?, start, duration, lane, params, anim? } ],
+  tracks:[ { name, kind, groupId, mute, solo, open } ],
+  cues:[ { kind, effectKey?, groupId?, pattern?, start, duration, track:index, params, anim? } ],
+  markers:[ { t, name } ],
   audioName }
 ```
-`applyProject` clears, rebuilds the room (and re-hangs the house light) and
-fixtures (relinking mirror pairs by index), re-adds cues by kind (laser `anim`
-through `loadAnim()`), applies settings, and stops the transport. Undo/redo
-snapshot this same JSON but pass `keepTransport: true` and re-select the cue and
-the fixture at the same index, so the playhead and the open inspector survive
-Ctrl+Z. Output settings (Art-Net IP, sACN) are per-computer preferences, not
+Version 1 (≤ v0.3.0) had no `tracks`/`markers` and a `lane` per cue;
+`tracksFromLanes()` converts it on open. `applyProject` clears, rebuilds the
+room (and re-hangs the house light) and fixtures (relinking mirror pairs by
+index), the tracks and markers, re-adds cues by kind onto their tracks (laser
+`anim` through `loadAnim()`), applies settings, and stops the transport.
+Undo/redo snapshot this same JSON but pass `keepTransport: true` and re-select
+the cue / track / marker and the fixture at the same index, so the playhead and
+the open inspector survive Ctrl+Z. Output settings (Art-Net IP, sACN) are per-computer preferences, not
 part of the show file.

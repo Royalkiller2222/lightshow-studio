@@ -19,7 +19,9 @@ export class Inspector {
    * deps: shell, patch, rig, room, editTools, cueInspector, transport, audio,
    *       engine, fixtureType(key), getProjectName(), onCommit(),
    *       onRoomChange(w, d, h), onRemoveFixture(fx), onSelectFixture(fx),
-   *       onLoadSong()
+   *       onLoadSong(), groups (fixture groups for track targets),
+   *       onTrackChange(track), onMoveTrack(track, ±1), onDeleteTrack(track),
+   *       onMarkerChange(marker), onDeleteMarker(marker)
    */
   constructor(root, deps) {
     this.root = root;
@@ -58,6 +60,12 @@ export class Inspector {
     const t = this.target;
     const d = this.d;
     if (t?.kind === 'cue') return `cue:${t.cue.id}`;
+    if (t?.kind === 'track') {
+      const tr = t.track;
+      const n = d.engine.cues.filter((c) => c.track === tr.id).length;
+      return `track:${tr.id}|${tr.name}|${tr.groupId}|${tr.mute}|${tr.solo}|${d.engine.tracks.indexOf(tr)}|${n}`;
+    }
+    if (t?.kind === 'marker') return `marker:${t.marker.name}|${t.marker.t.toFixed(3)}|${d.engine.markers.indexOf(t.marker)}`;
     if (t?.kind === 'fixture') {
       const e = d.patch.entries.find((x) => x.fixture === t.fx);
       const flags = d.patch.collisions();
@@ -70,7 +78,7 @@ export class Inspector {
       return `venue:${s.width}x${s.depth}x${s.height}|${d.patch.entries.length}|${d.patch.entries.reduce((n, e) => n + e.channelCount, 0)}`;
     }
     const laser = d.engine.cues.filter((c) => c.kind === 'laser').length;
-    return `show:${d.audio.name || ''}|${d.transport.hasAudio ? d.transport.duration.toFixed(1) : '-'}|${d.transport.bpm}|${(d.transport.beatOffset || 0).toFixed(3)}|${laser}|${d.engine.cues.length}|${d.getProjectName()}`;
+    return `show:${d.audio.name || ''}|${d.transport.hasAudio ? d.transport.duration.toFixed(1) : '-'}|${d.transport.bpm}|${(d.transport.beatOffset || 0).toFixed(3)}|${laser}|${d.engine.cues.length}|${d.engine.tracks.length}|${d.engine.markers.length}|${d.getProjectName()}`;
   }
 
   _render() {
@@ -86,6 +94,16 @@ export class Inspector {
       return;
     }
     this.d.cueInspector.show(null);
+    if (t?.kind === 'track') {
+      if (!this.d.engine.tracks.includes(t.track)) { this.target = null; this._sig = ''; this._render(); return; }
+      this.body.innerHTML = this._trackHtml(t.track);
+      return;
+    }
+    if (t?.kind === 'marker') {
+      if (!this.d.engine.markers.includes(t.marker)) { this.target = null; this._sig = ''; this._render(); return; }
+      this.body.innerHTML = this._markerHtml(t.marker);
+      return;
+    }
     if (t?.kind === 'fixture') {
       if (!this.d.patch.entries.some((e) => e.fixture === t.fx)) { this.target = null; this._sig = ''; this._render(); return; }
       this.body.innerHTML = this._fixtureHtml(t.fx);
@@ -180,6 +198,60 @@ export class Inspector {
     this.d.editTools.refresh();
   }
 
+  // ------------------------------------------------------------------ track
+  _trackHtml(tr) {
+    const d = this.d;
+    const laser = tr.kind === 'laser';
+    const n = d.engine.cues.filter((c) => c.track === tr.id).length;
+    const i = d.engine.tracks.indexOf(tr);
+    const groups = d.groups.map((g) => `<option value="${g.id}"${g.id === tr.groupId ? ' selected' : ''}>${esc(g.label)}</option>`).join('');
+    return `
+      <div class="ihead">
+        <div class="badge ${laser ? 'laser' : 'fixture'}">${icon(laser ? 'laser' : 'moving-head')}</div>
+        <div class="txt">
+          <div class="kicker">${laser ? 'Laser track' : 'Fixture track'}</div>
+          <input type="text" class="ititle-input" data-trk="name" value="${esc(tr.name)}" aria-label="Track name" spellcheck="false" />
+        </div>
+      </div>
+      <div class="sec">
+        ${laser ? '' : `<label class="prop"><span class="name">Fixtures</span><span class="ctl"><select data-trk="group">${groups}</select></span></label>`}
+        <label class="prop"><span class="name">Mute</span><span class="ctl"><input type="checkbox" class="switch" data-trk="mute" ${tr.mute ? 'checked' : ''} /></span></label>
+        <label class="prop"><span class="name">Solo</span><span class="ctl"><input type="checkbox" class="switch" data-trk="solo" ${tr.solo ? 'checked' : ''} /><span class="muted small">play only soloed tracks</span></span></label>
+        <div class="prop"><span class="name">Cues</span><span class="ctl">${n}</span></div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Order</div>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn sm" data-act="trk-up" ${i === 0 ? 'disabled' : ''}>${icon('up', 'sm')}Move up</button>
+          <button type="button" class="btn sm" data-act="trk-down" ${i === d.engine.tracks.length - 1 ? 'disabled' : ''}>${icon('down', 'sm')}Move down</button>
+        </div>
+        <p class="muted small" style="margin:6px 0 0">${laser ? 'When two laser cues overlap, the higher track is the one you see.' : 'Where tracks drive the same fixtures, the higher track wins colour and position; brightness takes the brightest.'}</p>
+      </div>
+      <div class="ifoot"><button type="button" class="btn danger" data-act="trk-delete">${icon('trash', 'sm')}Delete track${n ? ` and its ${n} cue${n === 1 ? '' : 's'}` : ''}</button></div>`;
+  }
+
+  // ----------------------------------------------------------------- marker
+  _markerHtml(m) {
+    const t = this.d.transport;
+    const beat = 60 / (t.bpm || 120);
+    const bar = Math.floor((m.t - (t.beatOffset || 0)) / (beat * 4)) + 1;
+    return `
+      <div class="ihead">
+        <div class="badge" style="color:var(--warn)">${icon('flag')}</div>
+        <div class="txt">
+          <div class="kicker">Marker</div>
+          <input type="text" class="ititle-input" data-mk="name" value="${esc(m.name)}" aria-label="Marker name" spellcheck="false" />
+        </div>
+      </div>
+      <div class="sec">
+        <div class="prop"><span class="name">Position</span><span class="ctl">${fmtTime(m.t)} <span class="muted small">bar ${Math.max(1, bar)}</span></span></div>
+        <label class="prop pro"><span class="name">Exact time</span><span class="ctl"><input type="number" step="0.01" min="0" data-mk="t" value="${r2(m.t)}" style="width:90px" /><span class="muted small">seconds</span></span></label>
+        <div style="margin-top:8px"><button type="button" class="btn sm" data-act="mk-go">${icon('play', 'sm')}Go to marker</button></div>
+      </div>
+      <div class="tip">${icon('help', 'sm')}<div>Markers name the sections of your song (Intro, Drop…). Drag them on the ruler; double-click the ruler to add one. In the Live workspace they'll become pads.</div></div>
+      <div class="ifoot"><button type="button" class="btn danger" data-act="mk-delete">${icon('trash', 'sm')}Delete marker</button></div>`;
+  }
+
   // ------------------------------------------------------------------ venue
   _venueHtml() {
     const d = this.d;
@@ -228,16 +300,25 @@ export class Inspector {
         <div style="margin-top:8px"><button type="button" class="btn sm" data-act="load-song">${icon('music', 'sm')}${t.hasAudio ? 'Replace song' : 'Load song'}</button></div>
       </div>
       <div class="sec">
-        <div class="sec-title">Cues</div>
+        <div class="sec-title">Timeline</div>
+        <div class="prop"><span class="name">Tracks</span><span class="ctl">${d.engine.tracks.length}</span></div>
         <div class="prop"><span class="name">Laser cues</span><span class="ctl">${laser}</span></div>
         <div class="prop"><span class="name">Fixture cues</span><span class="ctl">${fixture}</span></div>
+        <div class="prop"><span class="name">Markers</span><span class="ctl">${d.engine.markers.length}</span></div>
       </div>
-      <div class="tip">${icon('help', 'sm')}<div>Drag a laser pattern or an effect from the library onto the timeline, then click the clip to edit it here.</div></div>`;
+      <div class="tip">${icon('help', 'sm')}<div>Drag a laser pattern or an effect from the library onto a track (or below the tracks to start a new one), then click the clip to edit it here. Click a track's name to edit the track.</div></div>`;
   }
 
   // ------------------------------------------------------------------ events
   _onClick(e) {
     const act = e.target.closest('[data-act]')?.dataset.act;
+    const tr = this.target?.track;
+    const mk = this.target?.marker;
+    if (tr && act === 'trk-up') return this.d.onMoveTrack(tr, -1);
+    if (tr && act === 'trk-down') return this.d.onMoveTrack(tr, 1);
+    if (tr && act === 'trk-delete') return this.d.onDeleteTrack(tr);
+    if (mk && act === 'mk-go') return this.d.transport.seek(mk.t);
+    if (mk && act === 'mk-delete') return this.d.onDeleteMarker(mk);
     const fx = this.target?.fx;
     if (act === 'remove' && fx) this.d.onRemoveFixture(fx);
     else if (act === 'twin' && fx?.mirror) this.d.onSelectFixture(fx.mirror);
@@ -257,6 +338,25 @@ export class Inspector {
       const w = v('w'), dd = v('d'), h = v('h');
       if ([w, dd, h].every((x) => Number.isFinite(x) && x >= 3)) d.onRoomChange(w, dd, h);
       this.refresh();
+      return;
+    }
+    if (el.dataset.trk && this.target?.track) {
+      const tr = this.target.track;
+      const k = el.dataset.trk;
+      if (k === 'name') { const v = el.value.trim(); if (v) tr.name = v; }
+      else if (k === 'group') tr.groupId = el.value;
+      else if (k === 'mute') tr.mute = el.checked;
+      else if (k === 'solo') tr.solo = el.checked;
+      d.onTrackChange(tr);
+      this._render();
+      return;
+    }
+    if (el.dataset.mk && this.target?.marker) {
+      const m = this.target.marker;
+      if (el.dataset.mk === 'name') { const v = el.value.trim(); if (v) m.name = v; }
+      else { const v = parseFloat(el.value); if (Number.isFinite(v) && v >= 0) m.t = v; }
+      d.onMarkerChange(m);
+      this._render();
       return;
     }
     if (el.dataset.show === 'offset') {

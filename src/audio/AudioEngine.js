@@ -104,6 +104,33 @@ export class AudioEngine {
   }
 
   /** min/max peak pairs (length count*2) for waveform drawing. */
+  /**
+   * Min/max pairs for `count` columns covering [t0, t1) seconds — the zoomed
+   * timeline asks for just the visible slice. Columns outside the song are 0.
+   */
+  peaksRange(t0, t1, count) {
+    if (!this.buffer || count <= 0 || t1 <= t0) return null;
+    const ch = this.buffer.getChannelData(0);
+    const sr = this.buffer.sampleRate;
+    const out = new Float32Array(count * 2);
+    const per = ((t1 - t0) * sr) / count;
+    for (let i = 0; i < count; i++) {
+      const start = Math.max(0, Math.floor((t0 * sr) + i * per));
+      const end = Math.min(ch.length, Math.floor((t0 * sr) + (i + 1) * per));
+      let min = 0, max = 0;
+      // Long columns are sampled with a stride — plenty for a waveform outline.
+      const step = Math.max(1, Math.floor((end - start) / 256));
+      for (let j = start; j < end; j += step) {
+        const v = ch[j];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      out[i * 2] = min;
+      out[i * 2 + 1] = max;
+    }
+    return out;
+  }
+
   peaks(count) {
     if (!this.buffer || count <= 0) return null;
     const ch = this.buffer.getChannelData(0);

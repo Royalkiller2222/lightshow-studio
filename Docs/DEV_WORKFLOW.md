@@ -59,7 +59,10 @@ an hour if you don't know them.
    loaded app has (e.g. `document.querySelectorAll('#topbar button').length`,
    the canvas size, the clock text advancing). The UI is built by `app.js`, so
    an empty top bar means the module graph failed. This is how the missing
-   `three/examples` folder was caught (see below).
+   `three/examples` folder was caught (see below). **A hidden launch pauses
+   the page** (`document.visibilityState === 'hidden'`, zero rAF ticks), so a
+   "stuck clock" there is the harness, not the app — make the page active over
+   CDP (`Page.setWebLifecycleState {state:'active'}`) before judging animation.
 
 5. **Headless UI-module checks.** `core/Rig.js` and `core/project.js` run in
    Node with a real `THREE.Scene` and stub room/timeline/editTools objects —
